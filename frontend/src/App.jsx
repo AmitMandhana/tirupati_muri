@@ -20,6 +20,7 @@ import ReceivablesPage from './pages/ReceivablesPage';
 import ReportsPage from './pages/ReportsPage';
 import RetailBillingPage from './pages/RetailBillingPage';
 import SettingsPage from './pages/SettingsPage';
+import StaffDetailPage from './pages/StaffDetailPage';
 import StaffPage from './pages/StaffPage';
 import StockPage from './pages/StockPage';
 import WholesalePage from './pages/WholesalePage';
@@ -70,6 +71,7 @@ function App() {
             <Route path="stock" element={<StockPage />} />
             <Route path="production" element={<ProductionPage />} />
             <Route path="staff" element={<StaffPage />} />
+            <Route path="staff/:id" element={<StaffDetailPage />} />
             <Route path="expenses" element={<ExpensesPage />} />
             <Route path="cash-book" element={<CashBookPage />} />
             <Route path="bank-accounts" element={<BankAccountsPage />} />

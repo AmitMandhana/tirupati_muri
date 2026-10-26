@@ -4,6 +4,7 @@ import { CashCount } from '../models/CashCount.js';
 import { Expense } from '../models/Expense.js';
 import { PartyPayment } from '../models/PartyPayment.js';
 import { Sale } from '../models/Sale.js';
+import { STAFF_PAYMENT_TYPES, StaffTransaction } from '../models/StaffTransaction.js';
 import { WholesaleInvoice } from '../models/WholesaleInvoice.js';
 import { getNextCashAdjustmentNumber } from './billNumberService.js';
 import {
@@ -107,7 +108,8 @@ const dateRange = (from, before) => ({
 const getPriorCashFlow = async (from, before) => {
   const range = dateRange(from, before);
 
-  const [retailRows, wholesaleRows, paymentRows, expenseRows, adjustmentRows] = await Promise.all([
+  const [retailRows, wholesaleRows, paymentRows, expenseRows, adjustmentRows, staffRows] =
+    await Promise.all([
     Sale.aggregate([
       {
         $match: {
@@ -160,11 +162,22 @@ const getPriorCashFlow = async (from, before) => {
         },
       },
     ]),
+    StaffTransaction.aggregate([
+      {
+        $match: {
+          account: 'cash',
+          type: { $in: STAFF_PAYMENT_TYPES },
+          transactionDate: range,
+        },
+      },
+      { $group: { _id: null, total: { $sum: '$amount' } } },
+    ]),
   ]);
 
   const expenseRow = expenseRows[0] ?? {};
   const adjustmentRow = adjustmentRows[0] ?? {};
-  const staffPayments = roundMoney(expenseRow.staff ?? 0);
+  const cashStaffPayments = roundMoney(staffRows[0]?.total ?? 0);
+  const staffPayments = roundMoney((expenseRow.staff ?? 0) + cashStaffPayments);
   const loanPayments = roundMoney(expenseRow.loan ?? 0);
   const totalCashExpenses = roundMoney(expenseRow.total ?? 0);
   const cashSales = roundMoney(
@@ -176,7 +189,12 @@ const getPriorCashFlow = async (from, before) => {
 
   return {
     net: roundMoney(
-      cashSales + partyCollections + otherIncome - totalCashExpenses - otherOutflows,
+      cashSales +
+        partyCollections +
+        otherIncome -
+        totalCashExpenses -
+        cashStaffPayments -
+        otherOutflows,
     ),
   };
 };
@@ -184,7 +202,8 @@ const getPriorCashFlow = async (from, before) => {
 const loadDayRecords = async (start, end) => {
   const range = { $gte: start, $lte: end };
 
-  const [sales, invoices, payments, expenseRecords, adjustments, latestCount] = await Promise.all([
+  const [sales, invoices, payments, expenseRecords, adjustments, staffRecords, latestCount] =
+    await Promise.all([
     Sale.find({
       saleType: 'retail',
       paymentMethod: 'cash',
@@ -206,6 +225,13 @@ const loadDayRecords = async (start, end) => {
       .lean(),
     CashAdjustment.find({ adjustmentDate: range })
       .select('adjustmentNumber amount reason adjustmentDate createdAt')
+      .lean(),
+    StaffTransaction.find({
+      account: 'cash',
+      type: { $in: STAFF_PAYMENT_TYPES },
+      transactionDate: range,
+    })
+      .select('transactionNumber staffName type amount paymentMethod transactionDate createdAt')
       .lean(),
     CashCount.findOne({ countDate: range }).sort({ countedAt: -1, _id: -1 }).lean(),
   ]);
@@ -244,6 +270,10 @@ const loadDayRecords = async (start, end) => {
   let otherIncome = 0;
   let otherOutflows = 0;
 
+  staffRecords.forEach((record) => {
+    staffPayments = roundMoney(staffPayments + (record.amount ?? 0));
+  });
+
   adjustments.forEach((adjustment) => {
     const amount = roundMoney(adjustment.amount ?? 0);
 
@@ -264,6 +294,7 @@ const loadDayRecords = async (start, end) => {
     payments,
     expenseRecords,
     adjustments,
+    staffRecords,
     latestCount,
     cashSales,
     partyCollections,
@@ -335,6 +366,19 @@ const buildEntries = (records, openingCash) => {
       in: 0,
       out: roundMoney(expense.amount ?? 0),
       meta: { categoryKey: expense.categoryKey, paymentMethod: expense.paymentMethod },
+    });
+  });
+
+  records.staffRecords.forEach((record) => {
+    entries.push({
+      id: `staff-${record._id}`,
+      type: 'staff',
+      date: record.transactionDate,
+      reference: record.transactionNumber,
+      description: `${record.type === 'advance' ? 'Advance paid' : 'Salary payment'} · ${record.staffName}`,
+      in: 0,
+      out: roundMoney(record.amount ?? 0),
+      meta: { staffName: record.staffName, paymentMethod: record.paymentMethod },
     });
   });
 

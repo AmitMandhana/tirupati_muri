@@ -8,6 +8,7 @@ export const BANK_TRANSACTION_TYPES = [
   'expense',
   'loan-receipt',
   'loan-repayment',
+  'staff-payment',
   'transfer',
   'other',
 ];

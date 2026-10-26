@@ -13,6 +13,7 @@ import productRoutes from './routes/productRoutes.js';
 import productionRoutes from './routes/productionRoutes.js';
 import saleRoutes from './routes/saleRoutes.js';
 import settingsRoutes from './routes/settingsRoutes.js';
+import staffRoutes from './routes/staffRoutes.js';
 import stockRoutes from './routes/stockRoutes.js';
 import wholesaleInvoiceRoutes from './routes/wholesaleInvoiceRoutes.js';
 import { errorHandler, notFound } from './middleware/errorMiddleware.js';
@@ -47,6 +48,7 @@ app.use('/api/invoices', wholesaleInvoiceRoutes);
 app.use('/api/expenses', expenseRoutes);
 app.use('/api/cash-book', cashBookRoutes);
 app.use('/api/bank-accounts', bankAccountRoutes);
+app.use('/api/staff', staffRoutes);
 
 app.use(notFound);
 app.use(errorHandler);

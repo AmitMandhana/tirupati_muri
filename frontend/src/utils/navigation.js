@@ -50,6 +50,10 @@ export const getPageTitle = (pathname) => {
     return 'Bank Account';
   }
 
+  if (pathname.startsWith('/staff/')) {
+    return 'Staff Ledger';
+  }
+
   const activeItem = ALL_NAV_ITEMS.find((item) => item.to === pathname);
   return activeItem?.label ?? 'Dashboard';
 };

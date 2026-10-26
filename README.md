@@ -591,7 +591,7 @@ view shows the required rows:
 | Party collections   | Cash payments received from parties (`PAY-...`)                        |
 | Other income        | Cash count surplus adjustments (`ADJ-...`)                             |
 | Expenses            | Cash operating expenses                                                |
-| Staff payments      | Cash expenses in the **Salary** category                               |
+| Staff payments      | Cash expenses in the **Salary** category plus cash staff advances and salary payments (`STF-...`) |
 | Loan payments       | Cash expenses in the **Loan Interest** category                        |
 | Closing cash        | Opening plus cash in, minus cash out                                   |
 
@@ -727,13 +727,14 @@ When a bank account is selected, the related module also writes a bank transacti
 | Wholesale invoice paid by **UPI** or **Bank** | Sales collection   | Inflow    |
 | Party payment received by **UPI** or **Bank** | Party payment      | Inflow    |
 | Expense paid by **UPI** or **Bank**           | Expense            | Outflow   |
+| Staff advance or payment by **UPI** or **Bank** | Staff payment    | Outflow   |
 
 Only the **paid** portion of a wholesale invoice is credited; the unpaid due is not. Cash
 transactions never touch a bank account. The bank account selector appears on those forms when
 the method is UPI or Bank, listing active accounts with masked numbers and current balances,
 and is required when money is actually moving. If the bank movement fails, the invoice,
-payment or expense is rolled back (and stock reservations are released for invoices), so the
-source record and the bank ledger never disagree.
+payment, expense or staff entry is rolled back (and stock reservations are released for
+invoices), so the source record and the bank ledger never disagree.
 
 ### Worked example
 
@@ -824,6 +825,96 @@ recent batch. Its hint names that batch and its date.
 2. Save. The record becomes **PROD-000001** and Muri stock increases by **250 KG**.
 3. The Stock ledger shows a **Production** row of **+250 KG** referencing **PROD-000001**.
 
+## 16. Staff management and staff ledger
+
+Open **Staff** from the Operations section. Every staff member has their own account, and the
+ledger and balances are calculated from the recorded entries on every request.
+
+### Staff details
+
+| Field          | Rule                                                        |
+| -------------- | ----------------------------------------------------------- |
+| Name           | Required, up to 150 characters                              |
+| Phone          | Required; valid phone number of up to 20 characters         |
+| Role           | Required, up to 100 characters (e.g. Supervisor, Operator)  |
+| Joining date   | Required; cannot be in the future                           |
+| Monthly salary | Required; greater than zero                                 |
+| Status         | **Active** or **Inactive**                                  |
+| Notes          | Optional, up to 500 characters                              |
+
+Inactive staff keep their history but cannot receive new ledger entries. The list page shows
+each staff member with their role, phone, joining date, monthly salary, remaining payable and
+status, with search across name, phone and role plus an active/inactive filter.
+
+### Entry types
+
+| Type             | Ledger side | Effect on payable | Moves cash or bank |
+| ---------------- | ----------- | ----------------- | ------------------ |
+| Salary           | Debit       | Increases         | No                 |
+| Bonus            | Debit       | Increases         | No                 |
+| Advance          | Credit      | Reduces           | Yes                |
+| Payment          | Credit      | Reduces           | Yes                |
+| Deduction        | Credit      | Reduces           | No                 |
+| Loan recovery    | Credit      | Reduces           | No                 |
+
+**Debit** increases what the mill owes the staff member; **credit** reduces it. Only **Advance**
+and **Payment** move money — they reduce the cash book (cash) or the selected bank account (UPI
+or Bank). Salary, bonus, deduction and recovery are book entries and never touch cash or bank.
+
+Entries are numbered sequentially by the server: `STF-000001`, `STF-000002`, and so on, and a
+rejected entry does not consume a number.
+
+### Salary entry
+
+One salary entry is allowed per staff member per month. Choose the **salary month** (a `YYYY-MM`
+value; future months are rejected) and the amount defaults to the staff member's monthly salary,
+which can be adjusted. A second entry for the same month is rejected with a clear message. The
+monthly salary screen shows the calculation the owner expects:
+
+```
+Salary:     ₹15,000
+Advance:    ₹ 3,000
+Remaining:  ₹12,000
+```
+
+### Staff ledger
+
+The staff detail page shows **Date**, **Description**, **Debit**, **Credit** and **Balance** with
+a running balance, plus the entry type, the `STF-` reference and the salary month where relevant.
+Four cards summarise the account at all times: **Salary payable** (salary + bonus),
+**Payments made**, **Advance** and **Remaining payable**. A sidebar repeats the equation:
+
+```
+Salary payable − deductions − advance − paid = remaining payable
+```
+
+### Recording a payment
+
+Click **Record payment** (or **Record an advance**) and choose **Cash**, **UPI** or **Bank**:
+
+- **Cash** reduces the daily cash book as a staff payment row.
+- **UPI** or **Bank** reduces the selected bank account through a `staff-payment` outflow,
+  listed in the account ledger like any other bank transaction.
+
+If the bank movement fails, the staff entry is deleted, so the ledger and the bank balance never
+disagree.
+
+### Dashboard
+
+The **Staff** section shows **Today's Staff Payments** (cash and bank advances and payments
+recorded today, with the cash share) and **Monthly Salary Expense** (salary entries whose month
+is the current month, with the entry count and month name).
+
+### Worked example
+
+1. Add **Ramesh Kumar** with monthly salary **₹15,000**.
+2. Record the **October 2026 salary** of **₹15,000**. Salary payable **₹15,000**, remaining
+   payable **₹15,000**.
+3. Pay an **advance of ₹3,000** in cash. Remaining payable **₹12,000**, and the cash book's staff
+   payments increase by **₹3,000**.
+4. Pay the remaining **₹12,000**. Remaining payable **₹0** and all dues are settled — the
+   expected result.
+
 ## API endpoints
 
 | Method | Path               | Auth | Purpose                              |
@@ -872,6 +963,12 @@ recent batch. Its hint names that batch and its date.
 | GET    | `/api/production`  | Yes  | List production batches with a filtered summary (`search`, `from`, `to`, `limit`) |
 | POST   | `/api/production`  | Yes  | Record a production batch and add the finished Muri to stock |
 | GET    | `/api/production/summary` | Yes | Today's and this month's production plus the current yield |
+| GET    | `/api/staff`       | Yes  | List staff with derived totals and summary (`search`, `status`) |
+| POST   | `/api/staff`       | Yes  | Add a staff member                          |
+| GET    | `/api/staff/summary` | Yes | Staff counts, total payable, today's staff payments and monthly salary expense |
+| GET    | `/api/staff/:id`   | Yes  | Staff details, totals and full salary ledger |
+| PUT    | `/api/staff/:id`   | Yes  | Update staff details or status              |
+| POST   | `/api/staff/:id/transactions` | Yes | Record a salary, bonus, advance, payment, deduction or recovery entry |
 
 Protected routes expect `Authorization: Bearer <token>`. Products are never deleted; use
 `PUT /api/products/:id` with `{ "active": false }` to retire one.
@@ -1000,6 +1097,30 @@ rows. `summary` contains `count`, `finishedKg`, `rawMaterialKg`, `wastageKg`,
 `currentYieldPercent` from the latest batch and `latestProduction`
 (`productionNumber`, `productionDate`).
 
+`POST /api/staff` accepts `{ name, phone, role, joiningDate, monthlySalary, status?, notes? }`
+and returns `{ message, staff }` with `201`. The joining date cannot be in the future, the
+monthly salary must be greater than zero, and `status` defaults to `active`. Phone numbers are
+validated and stored as entered. `PUT /api/staff/:id` accepts the same fields.
+
+`GET /api/staff` returns `{ staff, summary }`, where every staff row includes its derived totals
+(`salaryPayable`, `paidToStaff`, `advancePaid`, `remainingPayable`, and the per-type sums) and
+`summary` contains `staffCount`, `activeCount`, `totalPayable`, `monthlyPayroll` and
+`salaryMonth`. `GET /api/staff/:id` returns `{ staff, summary, ledger }`; the ledger lists every
+entry with `debit`, `credit` and a running `balance`.
+
+`POST /api/staff/:id/transactions` accepts `{ type, amount?, transactionDate, salaryMonth?,
+paymentMethod?, bankAccountId?, description?, notes? }`. `type` is `salary`, `bonus`, `advance`,
+`payment`, `deduction` or `recovery`. For `salary`, `salaryMonth` is required (`YYYY-MM`, not in
+the future), one entry per staff per month is allowed (`409` on duplicates), and `amount` defaults
+to the staff member's monthly salary. Other types require an amount greater than zero. `advance`
+and `payment` derive the cash or bank account from `paymentMethod` (`cash`, `upi` or `bank`) and
+require an active `bankAccountId` for UPI/Bank. Inactive staff are rejected, and if the bank
+movement fails the entry is deleted.
+
+`GET /api/staff/summary` returns `{ summary }` with `staffCount`, `activeCount`, `totalPayable`,
+`todayPayments` (`total`, `cash`, `bank`, `count`), `monthlySalaryExpense`,
+`monthlySalaryCount`, `salaryMonth` and `salaryMonthLabel`.
+
 ## What is included in this release
 
 - Working MERN application with separate frontend and backend
@@ -1007,7 +1128,7 @@ rows. `summary` contains `count`, `finishedKg`, `rawMaterialKg`, `wastageKg`,
 - Single-user authentication: bcrypt hashing, JWT, protected routes, logout
 - First-time setup flow for the owner account
 - Responsive sidebar/header layout with all 15 navigation entries
-- Dashboard with real today's and monthly sales figures, Muri stock, total party receivable, combined bank balance and production metrics
+- Dashboard with real today's and monthly sales figures, Muri stock, total party receivable, combined bank balance, production metrics and staff payments
 - Business settings saved to MongoDB, including receipt/invoice footers, Muri rates, bag weight
   and low-stock threshold
 - Product master with search, add, edit and activate/deactivate; Muri is seeded on first start
@@ -1046,18 +1167,26 @@ rows. `summary` contains `count`, `finishedKg`, `rawMaterialKg`, `wastageKg`,
 - Finished Muri added to stock exactly once per production record through a referenced ledger entry, with the record rolled back if the movement fails; raw material stays on the record only
 - Production history with search, inclusive date filters, filtered totals, A4 print preview and PDF download
 - Dashboard production cards for today's production, monthly production and the current batch yield
+- Staff management with name, phone, role, joining date, monthly salary, status and notes, plus search and active/inactive filters
+- Staff ledger with salary, bonus, advance, payment, deduction and loan recovery entries (`STF-000001`, ...) and a running balance
+- Debit/credit salary ledger showing salary payable, payments made, advance, deductions and remaining payable
+- One monthly salary entry per staff member, defaulting to the monthly salary, with duplicate and future-month rejection
+- Cash and bank staff payments that reduce the cash book or the selected bank account through a `staff-payment` outflow, with rollback on failure
+- Dashboard staff cards for today's staff payments and the monthly salary expense
 - "Coming Soon" placeholders for all future modules
 - Server-side validation, consistent error responses, loading and empty states, toasts
 
 ## What is intentionally not included yet
 
-Staff, loans and reports are not implemented yet. Raw-material inventory is not implemented:
+Loans and reports are not implemented yet. Raw-material inventory is not implemented:
 production stores the raw material quantity on the record, but there is no raw-material stock
 balance or deduction and none is simulated. Bank accounts are tracked, but
 there is no cheque management, reconciliation against bank statements or automatic import.
-The cash book still tracks the single cash account separately from the bank accounts. Salary and
-Loan Interest expenses feed the Staff payments and Loan payments rows, and the bank ledger has
-loan receipt and loan repayment types, but there is no separate staff or loan module. WhatsApp
+The cash book still tracks the single cash account separately from the bank accounts. A separate
+loan module is not included: the bank ledger has loan receipt and loan repayment types, and cash
+expenses in the Loan Interest category feed the Loan payments row, but there is no loan account,
+amortisation or outstanding tracking. Staff salary, advances and payments are recorded in the
+staff module; there is no attendance, leave, overtime or payslip generation. WhatsApp
 integration is limited to click-to-chat payment reminders; no paid WhatsApp Business API or
 automatic server-side sending is used. No fake invoices, stock,
 transactions or accounting calculations are generated by this release.
@@ -1078,6 +1207,13 @@ transactions or accounting calculations are generated by this release.
 - Production yield and raw material per KG are calculated from the stored quantities on every
   read and are never stored. Each production record writes exactly one Production stock movement
   for the finished Muri; raw material is not part of the stock balance.
+- Staff balances are derived from the ledger on every read: salary and bonus are debits, advance,
+  payments, deductions and loan recoveries are credits, and the running balance equals the
+  remaining payable. Only advance and payment move money; the salary month is stored once per
+  entry so a month cannot be paid twice.
+- Staff names are snapshotted onto each `STF-` entry, so renaming a staff member never rewrites
+  history. Cash staff payments appear in the cash book's Staff payments row, and UPI/Bank staff
+  payments write a `staff-payment` bank outflow.
 - Payment reminders open `https://wa.me/...` in a new tab. The message is generated in the
   browser and nothing is sent until the user presses Send in WhatsApp.
 - Receipt and invoice PDFs use `Rs.` instead of `₹` because the built-in PDF fonts do not

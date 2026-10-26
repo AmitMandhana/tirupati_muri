@@ -21,6 +21,7 @@ const TYPE_LABELS = {
   expense: 'Expense',
   'loan-receipt': 'Loan receipt',
   'loan-repayment': 'Loan repayment',
+  'staff-payment': 'Staff payment',
   transfer: 'Transfer',
   other: 'Other',
 };
@@ -34,6 +35,7 @@ const TYPE_PILL_CLASSES = {
   withdrawal: 'bg-red-50 text-red-700',
   expense: 'bg-red-50 text-red-700',
   'loan-repayment': 'bg-red-50 text-red-700',
+  'staff-payment': 'bg-red-50 text-red-700',
   transfer: 'bg-brand-50 text-brand-700',
   other: 'bg-cream-100 text-ink-600',
 };

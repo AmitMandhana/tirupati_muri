@@ -11,6 +11,7 @@ import { getCashBookSummaryApi } from '../services/cashBookService';
 import { getReceivablesApi } from '../services/partyService';
 import { getProductionSummaryApi } from '../services/productionService';
 import { getSalesSummaryApi } from '../services/saleService';
+import { getStaffSummaryApi } from '../services/staffService';
 import { getStockOverviewApi } from '../services/stockService';
 import {
   formatINR,
@@ -36,6 +37,7 @@ const quickLinks = [
     icon: 'production',
     description: 'Batches & yield',
   },
+  { to: '/staff', label: 'Staff', icon: 'staff', description: 'Salaries & advances' },
   { to: '/parties', label: 'Parties', icon: 'parties', description: 'Accounts & ledgers' },
   {
     to: '/receivables',
@@ -68,6 +70,8 @@ const DashboardPage = () => {
   const [bankFailed, setBankFailed] = useState(false);
   const [production, setProduction] = useState(null);
   const [productionFailed, setProductionFailed] = useState(false);
+  const [staff, setStaff] = useState(null);
+  const [staffFailed, setStaffFailed] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
@@ -204,6 +208,27 @@ const DashboardPage = () => {
     };
   }, []);
 
+  useEffect(() => {
+    let isMounted = true;
+
+    getStaffSummaryApi()
+      .then((data) => {
+        if (isMounted) {
+          setStaff(data.summary ?? null);
+          setStaffFailed(false);
+        }
+      })
+      .catch(() => {
+        if (isMounted) {
+          setStaffFailed(true);
+        }
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
   const unit = stock?.unit ?? 'KG';
   const stockHint = stockFailed
     ? 'Stock unavailable'
@@ -286,8 +311,7 @@ const DashboardPage = () => {
             production.latestProduction.productionDate,
           )}`;
 
-  const productionStats = [
-    {
+  const productionStats = [    {
       title: "Today's Production",
       icon: 'production',
       hint: productionTodayHint,
@@ -307,6 +331,41 @@ const DashboardPage = () => {
       hint: currentYieldHint,
       value: production ? production.currentYieldPercent : null,
       formatValue: (value) => `${Number(value).toFixed(2)}%`,
+    },
+  ];
+
+  const staffPaymentLabel = (count) => `${count} ${count === 1 ? 'payment' : 'payments'}`;
+  const staffTodayHint = staffFailed
+    ? 'Staff summary unavailable'
+    : !staff
+      ? "Loading today's staff payments..."
+      : staff.todayPayments.count > 0
+        ? `${staffPaymentLabel(staff.todayPayments.count)} · ${formatINR(
+            staff.todayPayments.cash,
+          )} cash`
+        : 'No staff payments today';
+  const staffMonthHint = staffFailed
+    ? 'Staff summary unavailable'
+    : !staff
+      ? 'Loading monthly salary expense...'
+      : staff.monthlySalaryCount > 0
+        ? `${staff.monthlySalaryCount} salary ${
+            staff.monthlySalaryCount === 1 ? 'entry' : 'entries'
+          } · ${staff.salaryMonthLabel}`
+        : `No salary recorded for ${staff.salaryMonthLabel}`;
+
+  const staffStats = [
+    {
+      title: "Today's Staff Payments",
+      icon: 'staff',
+      hint: staffTodayHint,
+      value: staff ? staff.todayPayments.total : null,
+    },
+    {
+      title: 'Monthly Salary Expense',
+      icon: 'reports',
+      hint: staffMonthHint,
+      value: staff ? staff.monthlySalaryExpense : null,
     },
   ];
 
@@ -382,10 +441,11 @@ const DashboardPage = () => {
             <p className="mt-1 text-sm font-medium text-ink-500">Business Management System</p>
             <p className="mt-4 max-w-2xl text-sm leading-relaxed text-ink-500">
               Welcome back{firstName ? `, ${firstName}` : ''}. Retail billing, wholesale invoicing,
-              stock, production, party credit, expenses, the daily cash book and bank accounts are
-              live. Today&apos;s sales, expenses, cash in hand, bank balance, production, Muri
-              stock and party receivable below come from recorded bills, stock movements,
-              production batches, invoices, receipts, payments and bank transactions.
+              stock, production, staff salaries, party credit, expenses, the daily cash book and
+              bank accounts are live. Today&apos;s sales, expenses, cash in hand, bank balance,
+              production, staff payments, Muri stock and party receivable below come from recorded
+              bills, stock movements, production batches, salaries, invoices, receipts, payments and
+              bank transactions.
             </p>
           </div>
           <div className="hidden shrink-0 sm:block">
@@ -451,6 +511,18 @@ const DashboardPage = () => {
         </div>
       </section>
 
+      <section>
+        <SectionHeading
+          title="Staff"
+          description="Salaries, advances and payments recorded in the staff ledgers."
+        />
+        <div className="grid gap-3 sm:grid-cols-2">
+          {staffStats.map((stat) => (
+            <StatCard key={stat.title} {...stat} />
+          ))}
+        </div>
+      </section>
+
       <div className="grid gap-4 lg:grid-cols-3">
         <section className="card p-6 lg:col-span-2">
           <h2 className="text-base font-semibold text-ink-900">Quick access</h2>
@@ -483,15 +555,15 @@ const DashboardPage = () => {
 
         <section className="card border-brand-100 bg-brand-50/50 p-6">
           <span className="pill border border-brand-200 bg-white uppercase tracking-[0.12em] text-brand-700">
-            Billing, production &amp; finance live
+            Billing, production, staff &amp; finance live
           </span>
           <h2 className="mt-4 text-base font-semibold text-ink-900">What is included now</h2>
           <p className="mt-2 text-sm leading-relaxed text-ink-500">
             Sign-in, business settings, the product catalogue, retail billing, wholesale
-            invoicing, stock tracking, production entry with yield calculation, party ledgers,
-            credit limits, payment receipts, receivables, expense management, the daily cash book
-            and bank account management with transfers are ready. Staff and loan management will
-            be added step by step.
+            invoicing, stock tracking, production entry with yield calculation, staff salaries and
+            advances, party ledgers, credit limits, payment receipts, receivables, expense
+            management, the daily cash book and bank account management with transfers are ready.
+            Loan management will be added step by step.
           </p>
           <Link
             to="/settings"
