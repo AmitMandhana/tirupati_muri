@@ -4,10 +4,10 @@ A cloud-based business management web application for a puffed rice (muri) mill.
 includes authentication, the application shell, the dashboard, business settings, the product
 master, fast retail billing with printable thermal receipts, a ledger-based Muri stock module,
 wholesale invoicing with A4 invoices, complete party ledgers with credit limits, payment
-receipts, accounts receivable and WhatsApp payment reminders, expense management, and a daily
-cash book with cash in hand, physical cash counts and adjustments. Production, staff, bank
-accounts, loans and reports are represented by clearly marked "Coming Soon" pages and will be
-added in later phases.
+receipts, accounts receivable and WhatsApp payment reminders, expense management, a daily cash
+book with cash in hand, physical cash counts and adjustments, and multi-account bank management
+with transaction ledgers and account-to-account transfers. Production, staff, loans and reports
+are represented by clearly marked "Coming Soon" pages and will be added in later phases.
 
 ## Tech stack
 
@@ -24,20 +24,20 @@ murii/
 │   ├── .env.example
 │   └── src/
 │       ├── config/        # environment loading and database connection
-│       ├── controllers/   # auth, settings, product, sale, stock, party, payment, invoice, expense and cash book handlers
+│       ├── controllers/   # auth, settings, product, sale, stock, party, payment, invoice, expense, cash book and bank account handlers
 │       ├── middleware/    # JWT auth, error handling
-│       ├── models/        # User, BusinessSettings, Product, Sale, Counter, ProductStock, StockTransaction, Party, PartyPayment, WholesaleInvoice, ExpenseCategory, Expense, CashAdjustment, CashCount
-│       ├── routes/        # /api/auth, /api/settings, /api/products, /api/sales, /api/stock, /api/parties, /api/invoices, /api/expenses, /api/cash-book
-│       ├── services/      # token signing, product and category seeds, sales, wholesale invoices, party ledger, stock, expenses, cash book, bill numbers
+│       ├── models/        # User, BusinessSettings, Product, Sale, Counter, ProductStock, StockTransaction, Party, PartyPayment, WholesaleInvoice, ExpenseCategory, Expense, CashAdjustment, CashCount, BankAccount, BankTransaction
+│       ├── routes/        # /api/auth, /api/settings, /api/products, /api/sales, /api/stock, /api/parties, /api/invoices, /api/expenses, /api/cash-book, /api/bank-accounts
+│       ├── services/      # token signing, product and category seeds, sales, wholesale invoices, party ledger, stock, expenses, cash book, bank accounts, bill numbers
 │       ├── utils/         # async wrapper, HTTP errors, validators, stock types, local-date helpers
 │       ├── app.js         # Express app
 │       └── server.js      # startup entry point
 └── frontend/
     └── src/
-        ├── components/    # layout pieces, form fields, dialogs (expense, opening cash, physical cash), receipt, invoice sheet, payment dialog, icons
+        ├── components/    # layout pieces, form fields, dialogs (expense, opening cash, physical cash, bank account, bank transaction, bank transfer), receipt, invoice sheet, payment dialog, icons
         ├── hooks/         # authentication and business-settings contexts
         ├── layouts/       # sidebar + header application shell
-        ├── pages/         # login, dashboard, settings, products, retail billing, stock, wholesale, parties, party ledger, receivables, expenses, cash book, placeholders
+        ├── pages/         # login, dashboard, settings, products, retail billing, stock, wholesale, parties, party ledger, receivables, expenses, cash book, bank accounts, bank account ledger, placeholders
         ├── services/      # Axios instance and API calls
         └── utils/         # currency, dates, validation, billing, stock, invoice, WhatsApp reminder helpers and PDFs
 ```
@@ -640,6 +640,112 @@ The **Today's Expenses** card shows the total of every expense dated today (with
 portion) and **Cash in Hand** shows today's closing cash from the cash book service. Both are
 derived from actual transactions, never stored totals.
 
+## 14. Bank accounts and transactions
+
+Open **Bank Accounts** from the Finance section. Multiple accounts can be tracked at the same
+time, each with its own ledger, balance and daily totals.
+
+### Accounts
+
+**Add account** asks for:
+
+| Field            | Notes                                                              |
+| ---------------- | ------------------------------------------------------------------ |
+| Bank name        | Required, e.g. `SBI`, `HDFC Bank`                                   |
+| Account name     | Required, e.g. `Tirupati Puffed Rice Mill — Current Account`        |
+| Account number   | Required, 4–34 letters or digits; spaces and dashes are ignored     |
+| Opening balance  | Balance already in the account; `0` or more                         |
+| Active           | Inactive accounts keep their history but cannot receive transactions |
+
+Account numbers are normalised (spaces and dashes removed, letters uppercased) and must be
+unique; a duplicate returns `409`. The full number is stored but **never returned by the API**:
+every response contains only a masked value such as `•••• 9012`. Editing an account leaves the
+number field blank and shows the current masked number, so the stored number is preserved
+unless a new one is entered.
+
+### Balances
+
+No balance is stored. Each account balance is recalculated from its transactions on every
+request:
+
+```
+Opening balance + inflows − outflows = Current balance
+```
+
+A negative result is allowed and is shown in red; the app does not block an overdraft, it
+records what actually happened. The **Bank Accounts** page shows every account with its
+**Account**, **Balance**, **Today's inflow** and **Today's outflow**, plus summary cards for
+**Total bank balance**, **Active accounts** and today's total inflow/outflow. Clicking an account
+opens its ledger.
+
+### Transaction ledger
+
+The account details page shows the current balance, opening balance, today's inflow and outflow
+and the transaction count, followed by the ledger: an **Opening balance** row first, then every
+transaction in date order with reference, description, in, out and running balance. Transfer
+rows show the counterparty account (for example `HDFC Bank · •••• 2345`).
+
+**Record transaction** supports these manual types:
+
+| Type            | Direction | Typical use                               |
+| --------------- | --------- | ----------------------------------------- |
+| Deposit         | Inflow    | Cash or cheque deposited into the account |
+| Withdrawal      | Outflow   | Cash withdrawn from the account           |
+| Sales collection| Inflow    | Money collected from a sale               |
+| Party payment   | Inflow    | Payment received from a party             |
+| Expense         | Outflow   | A cost paid from the account              |
+| Loan receipt    | Inflow    | Loan or borrowing credited                |
+| Loan repayment  | Outflow   | Loan instalment paid                      |
+| Other           | Chosen    | Any other movement; **In** or **Out** must be selected |
+
+Each entry needs an amount greater than zero, a date (today or earlier) and a description of up
+to 200 characters, with optional notes. Numbers are sequential: `BTX-000001`, `BTX-000002`, ...
+Inactive accounts reject new transactions. The dialog previews the balance after the entry.
+
+### Transfers between accounts
+
+**Transfer** moves money between two different active accounts, for example **SBI → HDFC**:
+
+- the source account decreases by the amount;
+- the destination account increases by the same amount;
+- the total business money is unchanged.
+
+A transfer writes **two linked rows** that share one `TRF-000001` number: an outflow on the
+source and an inflow on the destination, each naming the other account. Transfers to the same
+account are rejected, and both entries must use an active account. If the second row cannot be
+written, the first is deleted, so a transfer never exists on one side only.
+
+### Automatic entries from other modules
+
+When a bank account is selected, the related module also writes a bank transaction:
+
+| Source                                        | Type               | Direction |
+| --------------------------------------------- | ------------------ | --------- |
+| Wholesale invoice paid by **UPI** or **Bank** | Sales collection   | Inflow    |
+| Party payment received by **UPI** or **Bank** | Party payment      | Inflow    |
+| Expense paid by **UPI** or **Bank**           | Expense            | Outflow   |
+
+Only the **paid** portion of a wholesale invoice is credited; the unpaid due is not. Cash
+transactions never touch a bank account. The bank account selector appears on those forms when
+the method is UPI or Bank, listing active accounts with masked numbers and current balances,
+and is required when money is actually moving. If the bank movement fails, the invoice,
+payment or expense is rolled back (and stock reservations are released for invoices), so the
+source record and the bank ledger never disagree.
+
+### Worked example
+
+1. Add **SBI Current Account** with opening balance **₹1,00,000**.
+2. Record a **₹20,000 deposit**. Balance is **₹1,20,000**.
+3. Record a **₹5,000 expense** paid from SBI. Balance is **₹1,15,000** — the expected result.
+4. Add **HDFC Bank** with opening balance **₹50,000**.
+5. Transfer **₹10,000** from SBI to HDFC. SBI shows **₹1,05,000**, HDFC **₹60,000**, and the
+   total stays **₹1,65,000**.
+
+### Dashboard
+
+The **Bank Balance** card shows the combined balance of every bank account and how many accounts
+are active, recalculated from the bank ledgers on every request.
+
 ## API endpoints
 
 | Method | Path               | Auth | Purpose                              |
@@ -679,6 +785,12 @@ derived from actual transactions, never stored totals.
 | GET    | `/api/cash-book/summary` | Yes | Today's cash in hand and today's expense totals |
 | PUT    | `/api/cash-book/opening` | Yes | Set the opening cash amount and opening date |
 | POST   | `/api/cash-book/counts` | Yes | Record a physical cash count and optional adjustment |
+| GET    | `/api/bank-accounts` | Yes | List bank accounts with balances and today's inflow/outflow |
+| POST   | `/api/bank-accounts` | Yes | Add a bank account |
+| GET    | `/api/bank-accounts/:id` | Yes | Account summary and full transaction ledger |
+| PUT    | `/api/bank-accounts/:id` | Yes | Update account details, opening balance or status |
+| POST   | `/api/bank-accounts/:id/transactions` | Yes | Record a manual bank transaction |
+| POST   | `/api/bank-accounts/transfer` | Yes | Transfer money between two accounts |
 
 Protected routes expect `Authorization: Bearer <token>`. Products are never deleted; use
 `PUT /api/products/:id` with `{ "active": false }` to retire one.
@@ -709,10 +821,13 @@ payment rows with a running balance. Nothing in the API accepts a balance or led
 the client; both are calculated from stored transactions.
 
 `POST /api/parties/:id/payments` accepts `{ amount, paymentMethod, account, paymentDate,
-notes? }`. `paymentMethod` is `cash`, `upi` or `bank`; `account` must be `cash` for cash
-payments and `bank` for UPI/bank payments. `paymentDate` accepts `YYYY-MM-DD` and cannot be in
-the future. The server assigns the `PAY-000001`-style number, creates the receipt and returns
-`{ payment, outstanding }`. A payment number is allocated only after validation succeeds.
+bankAccountId?, notes? }`. `paymentMethod` is `cash`, `upi` or `bank`; `account` must be `cash`
+for cash payments and `bank` for UPI/bank payments. When the account is `bank`, `bankAccountId`
+selects the active bank account that receives the money and is required for the bank balance to
+increase. `paymentDate` accepts `YYYY-MM-DD` and cannot be in the future. The server assigns the
+`PAY-000001`-style number, creates the receipt and returns `{ payment, outstanding }`. A payment
+number is allocated only after validation succeeds. If writing the bank transaction fails, the
+payment is deleted.
 
 `GET /api/parties/receivables` returns `{ parties, summary }`, sorted by outstanding from
 highest to lowest and limited to positive balances. `summary` contains `totalOutstanding`,
@@ -720,18 +835,21 @@ highest to lowest and limited to positive balances. `summary` contains `totalOut
 all-time totals and are not narrowed by `search`.
 
 `POST /api/invoices` accepts `{ partyId, productId, quantity, rate?, paid?, paymentMethod?,
-notes? }`. `rate` defaults to the product's wholesale rate, `paid` defaults to `0` and cannot
-exceed the calculated total, and `paymentMethod` is `cash` (default), `upi`, `bank` or
-`credit`. The server calculates `total`, `due`, status and the invoice number. Inactive parties
+bankAccountId?, notes? }`. `rate` defaults to the product's wholesale rate, `paid` defaults to
+`0` and cannot exceed the calculated total, and `paymentMethod` is `cash` (default), `upi`,
+`bank` or `credit`. When the method is `upi` or `bank` and `paid` is greater than zero,
+`bankAccountId` selects the active account credited with the paid amount. The server calculates
+`total`, `due`, status and the invoice number. Inactive parties
 are rejected, and an invoice with an amount due is rejected when it would take the party's
 outstanding above its credit limit. `GET /api/invoices` returns `{ invoices, summary }`, where
 the summary applies the same search/date filters as the list.
 
 `POST /api/expenses` accepts `{ expenseDate, categoryId? | category, amount, paymentMethod,
-account?, description, notes? }`. `expenseDate` is `YYYY-MM-DD` and cannot be in the future;
-`paymentMethod` is `cash`, `upi` or `bank`, and the account (`cash` for cash, `bank` otherwise)
-is derived on the server when omitted. The category can be an id or an existing category name;
-unknown names are rejected rather than silently created. The server allocates the
+bankAccountId?, account?, description, notes? }`. `expenseDate` is `YYYY-MM-DD` and cannot be in
+the future; `paymentMethod` is `cash`, `upi` or `bank`, and the account (`cash` for cash, `bank`
+otherwise) is derived on the server when omitted. For UPI and bank expenses, `bankAccountId`
+selects the active account the money is paid from. The category can be an id or an existing
+category name; unknown names are rejected rather than silently created. The server allocates the
 `EXP-000001`-style number after validation and returns `{ message, expense }`.
 `GET /api/expenses` returns `{ expenses, summary }`, where `summary` covers all rows matching
 the filters.
@@ -754,6 +872,36 @@ negative and the date cannot be in the future. `POST /api/cash-book/counts` acce
 writes an `ADJ-` adjustment (surplus to other cash income, shortage to other outflows). Counts
 for future or before-opening dates return `400`.
 
+`GET /api/bank-accounts` returns `{ accounts, summary }`. Each account contains its bank and
+account names, `maskedAccountNumber`, opening balance, active status, derived `balance`, today's
+inflow and outflow, transaction count and last transaction date; the summary contains
+`totalBalance`, `accountCount`, `activeCount`, `todayInflow` and `todayOutflow`. The full account
+number is never returned.
+
+`POST /api/bank-accounts` accepts `{ bankName, accountName, accountNumber, openingBalance?,
+active? }` and returns `{ message, account }` with `201`. The account number is normalised and
+must be unique (`409` on duplicates). `PUT /api/bank-accounts/:id` accepts the same fields; when
+`accountNumber` is omitted or blank the stored number is kept, so an edit does not require
+re-entering it.
+
+`GET /api/bank-accounts/:id` returns `{ account, summary, ledger }`. The ledger starts with an
+`opening` row and then lists every transaction with direction, in, out and running balance;
+transfer rows include the counterparty account as `{ _id, label }` using its masked number, for
+example `HDFC Bank · •••• 2345`.
+
+`POST /api/bank-accounts/:id/transactions` accepts `{ type, amount, transactionDate,
+description, notes?, direction? }`. `type` is `deposit`, `withdrawal`, `sales-collection`,
+`party-payment`, `expense`, `loan-receipt`, `loan-repayment` or `other`. The direction is fixed
+by the type except for `other`, which requires `direction` (`inflow` or `outflow`). The date
+cannot be in the future, the amount must be greater than zero, inactive accounts are rejected,
+and the server assigns the `BTX-000001`-style number.
+
+`POST /api/bank-accounts/transfer` accepts `{ fromAccountId, toAccountId, amount,
+transactionDate?, notes? }`. The accounts must be different and active. The server assigns one
+`TRF-000001`-style number, writes a matching outflow and inflow that both reference it, and
+returns `{ message, transfer }` with the number, amount, date and both account labels. If the
+second entry fails, the first is removed, so total business money is unchanged.
+
 ## What is included in this release
 
 - Working MERN application with separate frontend and backend
@@ -761,7 +909,7 @@ for future or before-opening dates return `400`.
 - Single-user authentication: bcrypt hashing, JWT, protected routes, logout
 - First-time setup flow for the owner account
 - Responsive sidebar/header layout with all 15 navigation entries
-- Dashboard with real today's and monthly sales figures, Muri stock and total party receivable
+- Dashboard with real today's and monthly sales figures, Muri stock, total party receivable and combined bank balance
 - Business settings saved to MongoDB, including receipt/invoice footers, Muri rates, bag weight
   and low-stock threshold
 - Product master with search, add, edit and activate/deactivate; Muri is seeded on first start
@@ -788,19 +936,27 @@ for future or before-opening dates return `400`.
 - Cash transactions with a running balance and credit sales excluded from cash in hand
 - Physical cash counts comparing expected and physical cash, with reason-required `ADJ-` adjustments for surpluses and shortages
 - Dashboard Today's Expenses and Cash in Hand driven by actual expense and cash book transactions
+- Multiple bank accounts with bank/account name, unique normalised account number, opening balance and active status
+- Account numbers masked in every API response and on screen; balances derived from transactions (`opening + inflow − outflow`)
+- Per-account bank ledger with `BTX-000001` transactions, running balance and today's inflow/outflow
+- Manual transaction types: deposit, withdrawal, sales collection, party payment, expense, loan receipt, loan repayment and other
+- Account-to-account transfers (`TRF-000001`) that move money without changing the total business balance
+- Automatic bank entries from wholesale UPI/bank receipts, party UPI/bank payments and UPI/bank expenses, with rollback on failure
+- Bank Accounts page with account balances and today's inflow/outflow, plus a dashboard Bank Balance card
 - "Coming Soon" placeholders for all future modules
 - Server-side validation, consistent error responses, loading and empty states, toasts
 
 ## What is intentionally not included yet
 
-Production, staff, bank accounts, loans and reports are not implemented yet. The cash book
-tracks a single cash account; it is not a bank reconciliation, and there is no multi-account
-or cheque tracking. Salary and Loan Interest expenses feed the Staff payments and Loan
-payments rows, but there is no separate staff or loan module. WhatsApp integration is limited
-to click-to-chat payment reminders; no paid WhatsApp Business API or automatic server-side
-sending is used. Production stock deductions are not implemented; the transaction type exists
-in the stock architecture for later use. No fake invoices, stock, transactions or accounting
-calculations are generated by this release.
+Production, staff, loans and reports are not implemented yet. Bank accounts are tracked, but
+there is no cheque management, reconciliation against bank statements or automatic import.
+The cash book still tracks the single cash account separately from the bank accounts. Salary and
+Loan Interest expenses feed the Staff payments and Loan payments rows, and the bank ledger has
+loan receipt and loan repayment types, but there is no separate staff or loan module. WhatsApp
+integration is limited to click-to-chat payment reminders; no paid WhatsApp Business API or
+automatic server-side sending is used. Production stock deductions are not implemented; the
+transaction type exists in the stock architecture for later use. No fake invoices, stock,
+transactions or accounting calculations are generated by this release.
 
 ## Notes
 
@@ -812,6 +968,9 @@ calculations are generated by this release.
   UPI and bank amounts are recorded separately and do not affect cash.
 - The cash book and its entries are recalculated from stored transactions on every request;
   only the opening cash amount, opening date and recorded physical counts are stored inputs.
+- Bank balances are derived the same way (`opening balance + inflows − outflows`) and are never
+  stored. Account numbers are stored for uniqueness but only masked values leave the API, and a
+  transfer is always a paired outflow and inflow, so it cannot change total business money.
 - Payment reminders open `https://wa.me/...` in a new tab. The message is generated in the
   browser and nothing is sent until the user presses Send in WhatsApp.
 - Receipt and invoice PDFs use `Rs.` instead of `₹` because the built-in PDF fonts do not

@@ -4,6 +4,7 @@ import { Party } from '../models/Party.js';
 import { PartyPayment, PARTY_PAYMENT_ACCOUNTS, PARTY_PAYMENT_METHODS } from '../models/PartyPayment.js';
 import { WholesaleInvoice } from '../models/WholesaleInvoice.js';
 import { getNextPartyPaymentNumber } from './billNumberService.js';
+import { recordBankMovement, resolveOptionalBankAccount } from './bankAccountService.js';
 import { httpError } from '../utils/httpError.js';
 import { escapeRegExp, isValidPhone, toText } from '../utils/validators.js';
 
@@ -466,19 +467,44 @@ export const receivePartyPayment = async (partyId, body = {}) => {
 
   const paymentDate = parsePaymentDate(body.paymentDate);
   const notes = parseNotes(body.notes);
+  const bankAccount = account === 'bank' ? await resolveOptionalBankAccount(body.bankAccountId) : null;
   const paymentNumber = await getNextPartyPaymentNumber();
 
-  const payment = await PartyPayment.create({
-    paymentNumber,
-    party: party._id,
-    partyName: party.name,
-    partyPhone: party.phone,
-    amount,
-    paymentMethod,
-    account,
-    paymentDate,
-    notes,
-  });
+  let payment;
+
+  try {
+    payment = await PartyPayment.create({
+      paymentNumber,
+      party: party._id,
+      partyName: party.name,
+      partyPhone: party.phone,
+      amount,
+      paymentMethod,
+      account,
+      bankAccount: bankAccount?._id ?? null,
+      paymentDate,
+      notes,
+    });
+
+    if (bankAccount) {
+      await recordBankMovement({
+        bankAccountId: bankAccount._id,
+        type: 'party-payment',
+        direction: 'inflow',
+        amount,
+        transactionDate: paymentDate,
+        description: `Payment received · ${party.name}`,
+        reference: paymentNumber,
+        notes,
+      });
+    }
+  } catch (error) {
+    if (payment) {
+      await PartyPayment.deleteOne({ _id: payment._id });
+    }
+
+    throw error;
+  }
 
   const outstanding = await getPartyOutstanding(party);
 

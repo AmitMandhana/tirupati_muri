@@ -43,6 +43,11 @@ const partyPaymentSchema = new mongoose.Schema(
       enum: PARTY_PAYMENT_ACCOUNTS,
       required: [true, 'Cash or bank account is required.'],
     },
+    bankAccount: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'BankAccount',
+      default: null,
+    },
     paymentDate: {
       type: Date,
       required: [true, 'Payment date is required.'],

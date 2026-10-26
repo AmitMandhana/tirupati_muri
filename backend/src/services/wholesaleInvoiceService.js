@@ -4,6 +4,7 @@ import { Party } from '../models/Party.js';
 import { Product } from '../models/Product.js';
 import { WholesaleInvoice } from '../models/WholesaleInvoice.js';
 import { getNextWholesaleInvoiceNumber } from './billNumberService.js';
+import { recordBankMovement, resolveOptionalBankAccount } from './bankAccountService.js';
 import { getPartyOutstanding } from './partyService.js';
 import {
   attachSaleReference,
@@ -180,6 +181,10 @@ export const createWholesaleInvoice = async (body = {}) => {
   }
 
   const status = due <= 0 ? 'paid' : paid > 0 ? 'partial' : 'credit';
+  const bankAccount =
+    paid > 0 && (paymentMethod === 'upi' || paymentMethod === 'bank')
+      ? await resolveOptionalBankAccount(body.bankAccountId)
+      : null;
   const reservation = await reserveWholesaleStock(product, quantity);
   let invoice;
 
@@ -202,10 +207,28 @@ export const createWholesaleInvoice = async (body = {}) => {
       paid,
       due,
       paymentMethod,
+      bankAccount: bankAccount?._id ?? null,
       status,
       notes,
     });
+
+    if (bankAccount) {
+      await recordBankMovement({
+        bankAccountId: bankAccount._id,
+        type: 'sales-collection',
+        direction: 'inflow',
+        amount: paid,
+        transactionDate: invoice.createdAt,
+        description: `Sales collection · ${party.name}`,
+        reference: invoiceNumber,
+        notes,
+      });
+    }
   } catch (error) {
+    if (invoice) {
+      await WholesaleInvoice.deleteOne({ _id: invoice._id });
+    }
+
     await releaseStockReservation(reservation);
     throw error;
   }

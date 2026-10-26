@@ -5,6 +5,8 @@ const WHOLESALE_INVOICE_COUNTER_ID = 'wholesaleInvoice';
 const PARTY_PAYMENT_COUNTER_ID = 'partyPayment';
 const EXPENSE_COUNTER_ID = 'expense';
 const CASH_ADJUSTMENT_COUNTER_ID = 'cashAdjustment';
+const BANK_TRANSACTION_COUNTER_ID = 'bankTransaction';
+const BANK_TRANSFER_COUNTER_ID = 'bankTransfer';
 
 export const formatRetailBillNumber = (sequence) => `R-${String(sequence).padStart(6, '0')}`;
 
@@ -66,4 +68,30 @@ export const getNextCashAdjustmentNumber = async () => {
   ).lean();
 
   return formatCashAdjustmentNumber(counter.seq);
+};
+
+export const formatBankTransactionNumber = (sequence) =>
+  `BTX-${String(sequence).padStart(6, '0')}`;
+
+export const getNextBankTransactionNumber = async () => {
+  const counter = await Counter.findOneAndUpdate(
+    { _id: BANK_TRANSACTION_COUNTER_ID },
+    { $inc: { seq: 1 } },
+    { returnDocument: 'after', upsert: true, setDefaultsOnInsert: true },
+  ).lean();
+
+  return formatBankTransactionNumber(counter.seq);
+};
+
+export const formatBankTransferNumber = (sequence) =>
+  `TRF-${String(sequence).padStart(6, '0')}`;
+
+export const getNextBankTransferNumber = async () => {
+  const counter = await Counter.findOneAndUpdate(
+    { _id: BANK_TRANSFER_COUNTER_ID },
+    { $inc: { seq: 1 } },
+    { returnDocument: 'after', upsert: true, setDefaultsOnInsert: true },
+  ).lean();
+
+  return formatBankTransferNumber(counter.seq);
 };

@@ -46,6 +46,10 @@ export const getPageTitle = (pathname) => {
     return 'Party Ledger';
   }
 
+  if (pathname.startsWith('/bank-accounts/')) {
+    return 'Bank Account';
+  }
+
   const activeItem = ALL_NAV_ITEMS.find((item) => item.to === pathname);
   return activeItem?.label ?? 'Dashboard';
 };

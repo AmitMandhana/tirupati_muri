@@ -3,6 +3,7 @@ import mongoose from 'mongoose';
 import { Expense, EXPENSE_ACCOUNTS, EXPENSE_PAYMENT_METHODS } from '../models/Expense.js';
 import { ExpenseCategory } from '../models/ExpenseCategory.js';
 import { getNextExpenseNumber } from './billNumberService.js';
+import { recordBankMovement, resolveOptionalBankAccount } from './bankAccountService.js';
 import { endOfLocalDay, parseDateOnly } from '../utils/dates.js';
 import { httpError } from '../utils/httpError.js';
 import { escapeRegExp, toText } from '../utils/validators.js';
@@ -51,6 +52,7 @@ const toExpenseView = (expense) => ({
   amount: roundMoney(expense.amount),
   paymentMethod: expense.paymentMethod,
   account: expense.account,
+  bankAccount: expense.bankAccount ?? null,
   expenseDate: expense.expenseDate,
   description: expense.description,
   notes: expense.notes ?? '',
@@ -177,20 +179,45 @@ export const createExpense = async (body = {}) => {
   }
 
   const notes = parseNotes(body.notes);
+  const bankAccount = account === 'bank' ? await resolveOptionalBankAccount(body.bankAccountId) : null;
   const expenseNumber = await getNextExpenseNumber();
 
-  const expense = await Expense.create({
-    expenseNumber,
-    category: category._id,
-    categoryKey: category.nameKey,
-    categoryName: category.name,
-    amount,
-    paymentMethod,
-    account,
-    expenseDate,
-    description,
-    notes,
-  });
+  let expense;
+
+  try {
+    expense = await Expense.create({
+      expenseNumber,
+      category: category._id,
+      categoryKey: category.nameKey,
+      categoryName: category.name,
+      amount,
+      paymentMethod,
+      account,
+      bankAccount: bankAccount?._id ?? null,
+      expenseDate,
+      description,
+      notes,
+    });
+
+    if (bankAccount) {
+      await recordBankMovement({
+        bankAccountId: bankAccount._id,
+        type: 'expense',
+        direction: 'outflow',
+        amount,
+        transactionDate: expenseDate,
+        description: `Expense · ${description}`,
+        reference: expenseNumber,
+        notes,
+      });
+    }
+  } catch (error) {
+    if (expense) {
+      await Expense.deleteOne({ _id: expense._id });
+    }
+
+    throw error;
+  }
 
   return toExpenseView(expense);
 };

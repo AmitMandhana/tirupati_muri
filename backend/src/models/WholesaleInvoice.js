@@ -87,6 +87,11 @@ const wholesaleInvoiceSchema = new mongoose.Schema(
       enum: WHOLESALE_PAYMENT_METHODS,
       required: [true, 'Payment method is required.'],
     },
+    bankAccount: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'BankAccount',
+      default: null,
+    },
     status: {
       type: String,
       enum: WHOLESALE_INVOICE_STATUSES,

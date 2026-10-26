@@ -10,6 +10,7 @@ import Spinner from '../components/Spinner';
 import StatCard from '../components/StatCard';
 import WholesaleInvoiceDialog from '../components/WholesaleInvoiceDialog';
 import { createInvoiceApi, getInvoicesApi } from '../services/invoiceService';
+import { getBankAccountsApi } from '../services/bankAccountService';
 import { getPartiesApi, getReceivablesApi } from '../services/partyService';
 import { getProductsApi } from '../services/productService';
 import { getStockOverviewApi } from '../services/stockService';
@@ -76,6 +77,8 @@ const WholesalePage = () => {
   const [quantity, setQuantity] = useState('');
   const [paid, setPaid] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('cash');
+  const [bankAccounts, setBankAccounts] = useState([]);
+  const [bankAccountId, setBankAccountId] = useState('');
   const [notes, setNotes] = useState('');
   const [errors, setErrors] = useState({});
   const [isSaving, setIsSaving] = useState(false);
@@ -237,6 +240,32 @@ const WholesalePage = () => {
   useEffect(() => {
     let isMounted = true;
 
+    getBankAccountsApi()
+      .then((data) => {
+        if (!isMounted) {
+          return;
+        }
+
+        const items = (Array.isArray(data.accounts) ? data.accounts : []).filter(
+          (account) => account.active,
+        );
+        setBankAccounts(items);
+        setBankAccountId((previous) => previous || items[0]?._id || '');
+      })
+      .catch(() => {
+        if (isMounted) {
+          setBankAccounts([]);
+        }
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    let isMounted = true;
+
     const timer = window.setTimeout(() => {
       getInvoicesApi({
         search: search.trim() || undefined,
@@ -287,6 +316,8 @@ const WholesalePage = () => {
       : null;
   const due = total !== null ? roundMoney(Math.max(total - paidValue, 0)) : null;
   const previewStatus = total !== null ? getInvoiceStatus(total, paidValue) : 'credit';
+  const showsBankAccount = paymentMethod === 'upi' || paymentMethod === 'bank';
+  const needsBankAccount = showsBankAccount && paidValue > 0;
 
   const refreshParties = () => {
     setPartiesError('');
@@ -328,7 +359,7 @@ const WholesalePage = () => {
 
   const handlePaymentChange = (method) => {
     setPaymentMethod(method);
-    setErrors((previous) => ({ ...previous, paid: '' }));
+    setErrors((previous) => ({ ...previous, paid: '', bankAccount: '' }));
   };
 
   const handleFilterChange = (setter) => (event) => {
@@ -378,6 +409,10 @@ const WholesalePage = () => {
       nextErrors.notes = 'Notes cannot be longer than 500 characters.';
     }
 
+    if (needsBankAccount && bankAccounts.length > 0 && !bankAccountId) {
+      nextErrors.bankAccount = 'Select the bank account that received the payment.';
+    }
+
     setErrors(nextErrors);
     return Object.keys(nextErrors).length === 0;
   };
@@ -400,6 +435,7 @@ const WholesalePage = () => {
         rate: rateValue,
         paid: paidValue,
         paymentMethod,
+        bankAccountId: needsBankAccount ? bankAccountId || undefined : undefined,
         notes: notes.trim(),
       });
 
@@ -685,6 +721,46 @@ const WholesalePage = () => {
               ))}
             </div>
           </div>
+
+          {showsBankAccount ? (
+            <div className="mt-4">
+              {bankAccounts.length > 0 ? (
+                <FormField
+                  label="Received into bank account"
+                  htmlFor="invoice-bank-account"
+                  error={errors.bankAccount}
+                  hint={
+                    paidValue > 0
+                      ? 'This receipt increases the selected bank balance.'
+                      : 'Applies when an amount is received now.'
+                  }
+                  required={paidValue > 0}
+                >
+                  <select
+                    id="invoice-bank-account"
+                    className={fieldInputClass(Boolean(errors.bankAccount))}
+                    value={bankAccountId}
+                    onChange={(event) => {
+                      setBankAccountId(event.target.value);
+                      setErrors((previous) => ({ ...previous, bankAccount: '' }));
+                    }}
+                  >
+                    {bankAccounts.map((bankAccount) => (
+                      <option key={bankAccount._id} value={bankAccount._id}>
+                        {bankAccount.bankName} · {bankAccount.maskedAccountNumber} ·{' '}
+                        {formatINR2(bankAccount.balance)}
+                      </option>
+                    ))}
+                  </select>
+                </FormField>
+              ) : (
+                <p className="rounded-lg bg-cream-50 px-3 py-2 text-xs text-ink-500">
+                  No active bank accounts yet. Add one from Bank Accounts to update a bank balance
+                  with this receipt.
+                </p>
+              )}
+            </div>
+          ) : null}
 
           <div className="mt-4 grid gap-4 sm:grid-cols-2">
             <FormField

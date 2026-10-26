@@ -6,6 +6,7 @@ import NavIcon from '../components/NavIcon';
 import StatCard from '../components/StatCard';
 import { useAuth } from '../hooks/useAuth';
 import { useBusinessSettings } from '../hooks/useBusinessSettings';
+import { getBankAccountsApi } from '../services/bankAccountService';
 import { getCashBookSummaryApi } from '../services/cashBookService';
 import { getReceivablesApi } from '../services/partyService';
 import { getSalesSummaryApi } from '../services/saleService';
@@ -15,6 +16,12 @@ import { formatINR, formatLongDate, formatQuantity } from '../utils/format';
 const quickLinks = [
   { to: '/retail-billing', label: 'Retail Billing', icon: 'billing', description: 'Counter sales' },
   { to: '/cash-book', label: 'Cash Book', icon: 'cashbook', description: 'Daily cash position' },
+  {
+    to: '/bank-accounts',
+    label: 'Bank Accounts',
+    icon: 'bank',
+    description: 'Balances & transfers',
+  },
   { to: '/expenses', label: 'Expenses', icon: 'expenses', description: 'Costs & categories' },
   { to: '/stock', label: 'Stock', icon: 'stock', description: 'Balance & ledger' },
   { to: '/parties', label: 'Parties', icon: 'parties', description: 'Accounts & ledgers' },
@@ -45,6 +52,8 @@ const DashboardPage = () => {
   const [receivablesFailed, setReceivablesFailed] = useState(false);
   const [cash, setCash] = useState(null);
   const [cashFailed, setCashFailed] = useState(false);
+  const [bank, setBank] = useState(null);
+  const [bankFailed, setBankFailed] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
@@ -139,6 +148,27 @@ const DashboardPage = () => {
     };
   }, []);
 
+  useEffect(() => {
+    let isMounted = true;
+
+    getBankAccountsApi()
+      .then((data) => {
+        if (isMounted) {
+          setBank(data.summary ?? null);
+          setBankFailed(false);
+        }
+      })
+      .catch(() => {
+        if (isMounted) {
+          setBankFailed(true);
+        }
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
   const unit = stock?.unit ?? 'KG';
   const stockHint = stockFailed
     ? 'Stock unavailable'
@@ -186,6 +216,16 @@ const DashboardPage = () => {
         ? 'Before the opening cash date'
         : `Opening ${formatINR(cash.openingCash)} · ${formatINR(cash.cashSales)} cash sales today`;
 
+  const bankBalanceHint = bankFailed
+    ? 'Bank summary unavailable'
+    : !bank
+      ? 'Loading bank balance...'
+      : bank.accountCount === 0
+        ? 'No bank accounts added'
+        : `${bank.activeCount} of ${bank.accountCount} ${
+            bank.accountCount === 1 ? 'account' : 'accounts'
+          } active`;
+
   const todayStats = [
     {
       title: "Today's Sales",
@@ -205,7 +245,12 @@ const DashboardPage = () => {
       hint: cashInHandHint,
       value: cash ? cash.cashInHand : null,
     },
-    { title: 'Bank Balance', icon: 'bank', hint: 'No bank accounts added', value: 0 },
+    {
+      title: 'Bank Balance',
+      icon: 'bank',
+      hint: bankBalanceHint,
+      value: bank ? bank.totalBalance : null,
+    },
   ];
 
   const receivablesHint = receivablesFailed
@@ -253,9 +298,10 @@ const DashboardPage = () => {
             <p className="mt-1 text-sm font-medium text-ink-500">Business Management System</p>
             <p className="mt-4 max-w-2xl text-sm leading-relaxed text-ink-500">
               Welcome back{firstName ? `, ${firstName}` : ''}. Retail billing, wholesale invoicing,
-              stock, party credit, expenses and the daily cash book are live. Today&apos;s sales,
-              expenses and cash in hand, Muri stock and party receivable below come from recorded
-              bills, stock movements, invoices, receipts and payments.
+              stock, party credit, expenses, the daily cash book and bank accounts are live.
+              Today&apos;s sales, expenses, cash in hand, bank balance, Muri stock and party
+              receivable below come from recorded bills, stock movements, invoices, receipts,
+              payments and bank transactions.
             </p>
           </div>
           <div className="hidden shrink-0 sm:block">
@@ -341,14 +387,14 @@ const DashboardPage = () => {
 
         <section className="card border-brand-100 bg-brand-50/50 p-6">
           <span className="pill border border-brand-200 bg-white uppercase tracking-[0.12em] text-brand-700">
-            Billing, credit &amp; cash live
+            Billing, banking &amp; cash live
           </span>
           <h2 className="mt-4 text-base font-semibold text-ink-900">What is included now</h2>
           <p className="mt-2 text-sm leading-relaxed text-ink-500">
             Sign-in, business settings, the product catalogue, retail billing, wholesale
             invoicing, stock tracking, party ledgers, credit limits, payment receipts,
-            receivables, expense management and the daily cash book are ready. Production, staff
-            and loan management will be added step by step.
+            receivables, expense management, the daily cash book and bank account management with
+            transfers are ready. Production, staff and loan management will be added step by step.
           </p>
           <Link
             to="/settings"

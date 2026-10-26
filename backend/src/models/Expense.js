@@ -43,6 +43,11 @@ const expenseSchema = new mongoose.Schema(
       enum: EXPENSE_ACCOUNTS,
       required: [true, 'Cash or bank account is required.'],
     },
+    bankAccount: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'BankAccount',
+      default: null,
+    },
     expenseDate: {
       type: Date,
       required: [true, 'Expense date is required.'],

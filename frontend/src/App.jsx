@@ -5,6 +5,7 @@ import ProtectedRoute from './components/ProtectedRoute';
 import { AuthProvider } from './hooks/useAuth';
 import { BusinessSettingsProvider } from './hooks/useBusinessSettings';
 import AppLayout from './layouts/AppLayout';
+import BankAccountDetailPage from './pages/BankAccountDetailPage';
 import BankAccountsPage from './pages/BankAccountsPage';
 import CashBookPage from './pages/CashBookPage';
 import DashboardPage from './pages/DashboardPage';
@@ -72,6 +73,7 @@ function App() {
             <Route path="expenses" element={<ExpensesPage />} />
             <Route path="cash-book" element={<CashBookPage />} />
             <Route path="bank-accounts" element={<BankAccountsPage />} />
+            <Route path="bank-accounts/:id" element={<BankAccountDetailPage />} />
             <Route path="loans" element={<LoansPage />} />
             <Route path="reports" element={<ReportsPage />} />
             <Route path="products" element={<ProductsPage />} />

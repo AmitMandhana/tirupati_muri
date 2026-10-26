@@ -5,8 +5,9 @@ import FormField from './FormField';
 import NavIcon from './NavIcon';
 import Spinner from './Spinner';
 import { createExpenseApi, createExpenseCategoryApi } from '../services/expenseService';
+import { getBankAccountsApi } from '../services/bankAccountService';
 import { getApiErrorMessage } from '../utils/errors';
-import { toDateInputValue } from '../utils/format';
+import { formatINR2, toDateInputValue } from '../utils/format';
 import { fieldInputClass } from '../utils/formStyles';
 
 const PAYMENT_METHODS = [
@@ -22,6 +23,8 @@ const ExpenseFormDialog = ({ categories = [], onCategoryAdded, onClose, onSaved 
   const [categoryId, setCategoryId] = useState(() => categories[0]?._id ?? '');
   const [amount, setAmount] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('cash');
+  const [bankAccounts, setBankAccounts] = useState([]);
+  const [bankAccountId, setBankAccountId] = useState('');
   const [description, setDescription] = useState('');
   const [notes, setNotes] = useState('');
   const [errors, setErrors] = useState({});
@@ -47,6 +50,32 @@ const ExpenseFormDialog = ({ categories = [], onCategoryAdded, onClose, onSaved 
       document.removeEventListener('keydown', handleKeyDown);
     };
   }, [onClose]);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    getBankAccountsApi()
+      .then((data) => {
+        if (!isMounted) {
+          return;
+        }
+
+        const items = (Array.isArray(data.accounts) ? data.accounts : []).filter(
+          (account) => account.active,
+        );
+        setBankAccounts(items);
+        setBankAccountId((previous) => previous || items[0]?._id || '');
+      })
+      .catch(() => {
+        if (isMounted) {
+          setBankAccounts([]);
+        }
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const account = PAYMENT_METHODS.find((method) => method.value === paymentMethod)?.account ?? 'cash';
 
@@ -110,6 +139,10 @@ const ExpenseFormDialog = ({ categories = [], onCategoryAdded, onClose, onSaved 
       nextErrors.notes = 'Notes cannot be longer than 500 characters.';
     }
 
+    if (account === 'bank' && bankAccounts.length > 0 && !bankAccountId) {
+      nextErrors.bankAccount = 'Select the bank account that paid.';
+    }
+
     setErrors(nextErrors);
 
     if (Object.keys(nextErrors).length > 0) {
@@ -124,6 +157,7 @@ const ExpenseFormDialog = ({ categories = [], onCategoryAdded, onClose, onSaved 
         amount: roundMoney(amountValue),
         paymentMethod,
         account,
+        bankAccountId: account === 'bank' ? bankAccountId || undefined : undefined,
         expenseDate,
         description: description.trim(),
         notes: notes.trim(),
@@ -152,7 +186,8 @@ const ExpenseFormDialog = ({ categories = [], onCategoryAdded, onClose, onSaved 
               Add expense
             </h2>
             <p className="mt-0.5 text-xs text-ink-500">
-              Cash expenses reduce the cash book; UPI and bank expenses are recorded separately.
+              Cash expenses reduce the cash book; UPI and bank expenses reduce the selected bank
+              account.
             </p>
           </div>
           <button
@@ -312,6 +347,40 @@ const ExpenseFormDialog = ({ categories = [], onCategoryAdded, onClose, onSaved 
                 Paid from the {account === 'cash' ? 'cash' : 'bank'} account.
               </p>
             </div>
+
+            {account === 'bank' ? (
+              bankAccounts.length > 0 ? (
+                <FormField
+                  label="Paid from bank account"
+                  htmlFor="expense-bank-account"
+                  error={errors.bankAccount}
+                  hint="The selected account balance will be reduced."
+                  required
+                >
+                  <select
+                    id="expense-bank-account"
+                    className={fieldInputClass(Boolean(errors.bankAccount))}
+                    value={bankAccountId}
+                    onChange={(event) => {
+                      setBankAccountId(event.target.value);
+                      setErrors((previous) => ({ ...previous, bankAccount: '' }));
+                    }}
+                  >
+                    {bankAccounts.map((bankAccount) => (
+                      <option key={bankAccount._id} value={bankAccount._id}>
+                        {bankAccount.bankName} · {bankAccount.maskedAccountNumber} ·{' '}
+                        {formatINR2(bankAccount.balance)}
+                      </option>
+                    ))}
+                  </select>
+                </FormField>
+              ) : (
+                <p className="rounded-lg bg-cream-50 px-3 py-2 text-xs text-ink-500">
+                  No active bank accounts yet. Add one from Bank Accounts to reduce a bank balance
+                  with this expense.
+                </p>
+              )
+            ) : null}
 
             <FormField
               label="Description"
