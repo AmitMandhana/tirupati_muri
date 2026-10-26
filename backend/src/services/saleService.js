@@ -3,6 +3,11 @@ import mongoose from 'mongoose';
 import { Product } from '../models/Product.js';
 import { Sale } from '../models/Sale.js';
 import { getNextRetailBillNumber } from './billNumberService.js';
+import {
+  attachSaleReference,
+  releaseRetailReservation,
+  reserveRetailStock,
+} from './stockService.js';
 import { httpError } from '../utils/httpError.js';
 import { toText } from '../utils/validators.js';
 
@@ -110,21 +115,36 @@ export const createRetailSale = async (body = {}) => {
     throw httpError(400, 'Notes cannot be longer than 500 characters.');
   }
 
-  const billNumber = await getNextRetailBillNumber();
-  const sale = await Sale.create({
-    billNumber,
-    saleType: 'retail',
-    product: product._id,
-    productName: product.name,
-    unit: product.unit,
-    quantity,
-    rate,
-    amount,
-    paymentMethod,
-    customerName,
-    notes,
-  });
+  const reservation = await reserveRetailStock(product, quantity);
+  let sale;
 
-  // Stock deduction will be recorded here when the stock module is added.
-  return sale;
+  try {
+    const billNumber = await getNextRetailBillNumber();
+    await attachSaleReference(reservation.transaction._id, billNumber);
+
+    sale = await Sale.create({
+      billNumber,
+      saleType: 'retail',
+      product: product._id,
+      productName: product.name,
+      unit: product.unit,
+      quantity,
+      rate,
+      amount,
+      paymentMethod,
+      customerName,
+      notes,
+    });
+  } catch (error) {
+    await releaseRetailReservation(reservation);
+    throw error;
+  }
+
+  return {
+    sale,
+    stock: {
+      quantity: reservation.quantity,
+      unit: product.unit,
+    },
+  };
 };

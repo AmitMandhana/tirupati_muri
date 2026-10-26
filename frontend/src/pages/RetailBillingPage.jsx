@@ -9,6 +9,7 @@ import SaleReceiptDialog from '../components/SaleReceiptDialog';
 import Spinner from '../components/Spinner';
 import { createSaleApi, getSalesApi } from '../services/saleService';
 import { getProductsApi } from '../services/productService';
+import { getStockOverviewApi } from '../services/stockService';
 import { PAYMENT_METHODS, getPaymentLabel } from '../utils/billing';
 import { getApiErrorMessage } from '../utils/errors';
 import {
@@ -57,6 +58,9 @@ const RetailBillingPage = () => {
 
   const [receiptSale, setReceiptSale] = useState(null);
   const [receiptMode, setReceiptMode] = useState('completed');
+
+  const [stockByProduct, setStockByProduct] = useState({});
+  const [stockToken, setStockToken] = useState(0);
 
   const amountRef = useRef(null);
   const quantityRef = useRef(null);
@@ -125,7 +129,34 @@ const RetailBillingPage = () => {
     };
   }, [recentToken]);
 
+  useEffect(() => {
+    let isMounted = true;
+
+    getStockOverviewApi()
+      .then((data) => {
+        if (!isMounted) {
+          return;
+        }
+
+        const next = {};
+        (Array.isArray(data.stocks) ? data.stocks : []).forEach((item) => {
+          next[String(item.productId)] = item;
+        });
+        setStockByProduct(next);
+      })
+      .catch(() => {
+        if (isMounted) {
+          setStockByProduct({});
+        }
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [stockToken]);
+
   const selectedProduct = products.find((product) => product._id === productId) ?? null;
+  const selectedStock = stockByProduct[productId] ?? null;
   const unit = selectedProduct?.unit || 'KG';
   const rateValue = toNumber(rate);
   const amountValue = toNumber(amount);
@@ -263,6 +294,7 @@ const RetailBillingPage = () => {
       });
 
       setRecentSales((prev) => [data.sale, ...prev].slice(0, 8));
+      setStockToken((token) => token + 1);
       setReceiptMode('completed');
       setReceiptSale(data.sale);
       toast.success(`Bill ${data.sale.billNumber} completed.`);
@@ -496,6 +528,15 @@ const RetailBillingPage = () => {
                 </div>
               </div>
 
+              {selectedStock &&
+              calculatedQuantity !== null &&
+              calculatedQuantity > selectedStock.quantity + 1e-9 ? (
+                <p className="mt-1.5 text-xs font-medium text-red-600">
+                  Only {formatQuantity(selectedStock.quantity)} {unit} available. Reduce the
+                  quantity or add stock before saving.
+                </p>
+              ) : null}
+
               {inputMode === 'amount' ? (
                 <div className="mt-3 flex flex-wrap items-center gap-2">
                   <span className="text-xs text-ink-400">Quick amount</span>
@@ -623,6 +664,14 @@ const RetailBillingPage = () => {
                   </dd>
                 </div>
                 <div className="flex items-baseline justify-between gap-3">
+                  <dt className="text-ink-500">Available stock</dt>
+                  <dd className="font-medium text-ink-900">
+                    {selectedStock
+                      ? `${formatQuantity(selectedStock.quantity)} ${unit}`
+                      : '—'}
+                  </dd>
+                </div>
+                <div className="flex items-baseline justify-between gap-3">
                   <dt className="text-ink-500">Payment</dt>
                   <dd className="font-medium text-ink-900">
                     {getPaymentLabel(paymentMethod)}
@@ -709,8 +758,8 @@ const RetailBillingPage = () => {
             </section>
 
             <p className="px-1 text-xs text-ink-400">
-              Quantity is calculated automatically and stored with full precision. Stock deductions
-              will be added with the stock module.
+              Quantity is calculated automatically and stored with full precision. Stock is
+              deducted when the bill is completed and recorded in the stock ledger.
             </p>
           </div>
         </div>

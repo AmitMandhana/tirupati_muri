@@ -68,6 +68,11 @@ const businessSettingsSchema = new mongoose.Schema(
       default: 50,
       min: [0.01, 'Bag weight must be greater than 0.'],
     },
+    lowStockThresholdKg: {
+      type: Number,
+      default: 100,
+      min: [0, 'Low-stock threshold cannot be negative.'],
+    },
   },
   {
     timestamps: true,

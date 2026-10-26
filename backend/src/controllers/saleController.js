@@ -27,11 +27,12 @@ const summarizeFrom = async (from) => {
 };
 
 export const createSale = asyncHandler(async (req, res) => {
-  const sale = await createRetailSale(req.body);
+  const { sale, stock } = await createRetailSale(req.body);
 
   return res.status(201).json({
     message: 'Sale completed.',
     sale,
+    stock,
   });
 });
 

@@ -7,12 +7,13 @@ import StatCard from '../components/StatCard';
 import { useAuth } from '../hooks/useAuth';
 import { useBusinessSettings } from '../hooks/useBusinessSettings';
 import { getSalesSummaryApi } from '../services/saleService';
-import { formatLongDate } from '../utils/format';
+import { getStockOverviewApi } from '../services/stockService';
+import { formatLongDate, formatQuantity } from '../utils/format';
 
 const quickLinks = [
   { to: '/retail-billing', label: 'Retail Billing', icon: 'billing', description: 'Counter sales' },
+  { to: '/stock', label: 'Stock', icon: 'stock', description: 'Balance & ledger' },
   { to: '/parties', label: 'Parties', icon: 'parties', description: 'Customers & suppliers' },
-  { to: '/stock', label: 'Stock', icon: 'stock', description: 'Paddy & muri' },
   { to: '/reports', label: 'Reports', icon: 'reports', description: 'Business summaries' },
 ];
 
@@ -29,6 +30,8 @@ const DashboardPage = () => {
   const firstName = user?.name?.trim().split(/\s+/)[0];
   const [summary, setSummary] = useState(null);
   const [summaryFailed, setSummaryFailed] = useState(false);
+  const [stock, setStock] = useState(null);
+  const [stockFailed, setStockFailed] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
@@ -50,6 +53,45 @@ const DashboardPage = () => {
       isMounted = false;
     };
   }, []);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    getStockOverviewApi()
+      .then((data) => {
+        if (!isMounted) {
+          return;
+        }
+
+        const items = Array.isArray(data.stocks) ? data.stocks : [];
+        const muri =
+          items.find((item) => item.productName.trim().toLowerCase() === 'muri') ??
+          items.find((item) => item.active) ??
+          items[0] ??
+          null;
+
+        setStock(muri);
+        setStockFailed(false);
+      })
+      .catch(() => {
+        if (isMounted) {
+          setStockFailed(true);
+        }
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const unit = stock?.unit ?? 'KG';
+  const stockHint = stockFailed
+    ? 'Stock unavailable'
+    : !stock
+      ? 'Loading stock...'
+      : !stock.openingRecorded
+        ? 'Opening stock not recorded'
+        : `${formatQuantity(stock.bags)} bags · minimum ${formatQuantity(stock.lowStockThreshold)} ${unit}`;
 
   const today = summary?.today;
   const month = summary?.month;
@@ -85,7 +127,13 @@ const DashboardPage = () => {
 
   const businessStats = [
     { title: 'Party Receivable', icon: 'parties', hint: 'No party balances yet', value: 0 },
-    { title: 'Muri Stock', icon: 'stock', hint: 'Stock module not started', value: 0 },
+    {
+      title: 'Muri Stock',
+      icon: 'stock',
+      hint: stockHint,
+      value: stock ? stock.quantity : null,
+      formatValue: (value) => `${formatQuantity(value)} ${unit}`,
+    },
     {
       title: 'Monthly Sales',
       icon: 'reports',
@@ -108,9 +156,9 @@ const DashboardPage = () => {
             </h1>
             <p className="mt-1 text-sm font-medium text-ink-500">Business Management System</p>
             <p className="mt-4 max-w-2xl text-sm leading-relaxed text-ink-500">
-              Welcome back{firstName ? `, ${firstName}` : ''}. Retail billing is live: today&apos;s
-              sales below are calculated from recorded bills. Stock and accounting figures will
-              fill in as later modules are added.
+              Welcome back{firstName ? `, ${firstName}` : ''}. Retail billing and stock are live:
+              today&apos;s sales and Muri stock below come from recorded bills and stock
+              transactions. Accounting figures will fill in as later modules are added.
             </p>
           </div>
           <div className="hidden shrink-0 sm:block">
@@ -118,6 +166,27 @@ const DashboardPage = () => {
           </div>
         </div>
       </section>
+
+      {stock?.openingRecorded && stock.lowStock ? (
+        <section role="alert" className="card border-red-200 bg-red-50/70 p-5">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h2 className="text-base font-semibold text-red-800">Low stock warning</h2>
+              <p className="mt-1 text-sm text-red-700">
+                {stock.productName} is below the minimum of{' '}
+                {formatQuantity(stock.lowStockThreshold)} {unit}. Current stock:{' '}
+                {formatQuantity(stock.quantity)} {unit}.
+              </p>
+            </div>
+            <Link
+              to="/stock"
+              className="btn-secondary shrink-0 border-red-200 text-red-800 hover:bg-red-100"
+            >
+              Open stock
+            </Link>
+          </div>
+        </section>
+      ) : null}
 
       <section>
         <SectionHeading
@@ -134,7 +203,7 @@ const DashboardPage = () => {
       <section>
         <SectionHeading
           title="Business position"
-          description="Stock and account balances will appear in later phases."
+          description="Stock and sales update from recorded transactions."
         />
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           {businessStats.map((stat) => (
@@ -175,12 +244,12 @@ const DashboardPage = () => {
 
         <section className="card border-brand-100 bg-brand-50/50 p-6">
           <span className="pill border border-brand-200 bg-white uppercase tracking-[0.12em] text-brand-700">
-            Retail billing live
+            Billing &amp; stock live
           </span>
           <h2 className="mt-4 text-base font-semibold text-ink-900">What is included now</h2>
           <p className="mt-2 text-sm leading-relaxed text-ink-500">
-            Sign-in, business settings, the product catalogue and retail billing are ready. Stock,
-            production, staff, loan and reporting modules will be added step by step.
+            Sign-in, business settings, the product catalogue, retail billing and stock tracking
+            are ready. Production, staff, loan and reporting modules will be added step by step.
           </p>
           <Link
             to="/settings"

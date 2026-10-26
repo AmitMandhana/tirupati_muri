@@ -24,9 +24,15 @@ const SETTINGS_FIELDS = [
   'retailMuriRate',
   'wholesaleMuriRate',
   'bagWeightKg',
+  'lowStockThresholdKg',
 ];
 
-const NUMERIC_FIELDS = new Set(['retailMuriRate', 'wholesaleMuriRate', 'bagWeightKg']);
+const NUMERIC_FIELDS = new Set([
+  'retailMuriRate',
+  'wholesaleMuriRate',
+  'bagWeightKg',
+  'lowStockThresholdKg',
+]);
 
 const normalizedValues = (values) =>
   SETTINGS_FIELDS.map((field) => {
@@ -118,6 +124,11 @@ const BusinessSettingsForm = ({ initialValues }) => {
       nextErrors.bagWeightKg = 'Bag weight must be greater than 0.';
     }
 
+    const lowStockThresholdKg = toNumber(formData.lowStockThresholdKg);
+    if (lowStockThresholdKg === null || lowStockThresholdKg < 0) {
+      nextErrors.lowStockThresholdKg = 'Enter a threshold of 0 or more.';
+    }
+
     setErrors(nextErrors);
     return Object.keys(nextErrors).length === 0;
   };
@@ -142,6 +153,7 @@ const BusinessSettingsForm = ({ initialValues }) => {
       retailMuriRate: toNumber(formData.retailMuriRate),
       wholesaleMuriRate: toNumber(formData.wholesaleMuriRate),
       bagWeightKg: toNumber(formData.bagWeightKg),
+      lowStockThresholdKg: toNumber(formData.lowStockThresholdKg),
     };
 
     setIsSaving(true);
@@ -283,8 +295,9 @@ const BusinessSettingsForm = ({ initialValues }) => {
           </h3>
           <p className="mt-1 text-xs text-ink-500">
             Business-level defaults for Muri. Product rates are managed in Product Management.
+            The minimum stock threshold drives low-stock warnings.
           </p>
-          <div className="mt-3 grid gap-4 sm:grid-cols-3">
+          <div className="mt-3 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
             <FormField
               label="Retail muri rate (₹/KG)"
               htmlFor="retail-muri-rate"
@@ -336,6 +349,25 @@ const BusinessSettingsForm = ({ initialValues }) => {
                 placeholder="50"
                 value={formData.bagWeightKg}
                 onChange={(event) => updateField('bagWeightKg', event.target.value)}
+              />
+            </FormField>
+
+            <FormField
+              label="Minimum stock (KG)"
+              htmlFor="low-stock-threshold"
+              error={errors.lowStockThresholdKg}
+              hint="Warn when stock falls below this."
+            >
+              <input
+                id="low-stock-threshold"
+                type="number"
+                inputMode="decimal"
+                min="0"
+                step="1"
+                className={fieldInputClass(Boolean(errors.lowStockThresholdKg))}
+                placeholder="100"
+                value={formData.lowStockThresholdKg}
+                onChange={(event) => updateField('lowStockThresholdKg', event.target.value)}
               />
             </FormField>
           </div>
@@ -533,7 +565,8 @@ const SettingsPage = () => {
             <h2 className="text-base font-semibold text-ink-900">About these settings</h2>
             <p className="mt-2 text-sm leading-relaxed text-ink-500">
               Business name updates in the sidebar, header and dashboard after saving. Muri rates,
-              bag weight and document footers are stored for use in future billing modules.
+              bag weight, minimum stock and document footers are stored for use across billing and
+              stock screens.
             </p>
           </section>
         </aside>

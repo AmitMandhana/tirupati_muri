@@ -20,6 +20,7 @@ const DEFAULT_SETTINGS = {
   retailMuriRate: 45,
   wholesaleMuriRate: 42,
   bagWeightKg: 50,
+  lowStockThresholdKg: 100,
 };
 
 export const getSettings = asyncHandler(async (req, res) => {
@@ -45,6 +46,7 @@ export const updateSettings = asyncHandler(async (req, res) => {
     retailMuriRate: Number(req.body.retailMuriRate),
     wholesaleMuriRate: Number(req.body.wholesaleMuriRate),
     bagWeightKg: Number(req.body.bagWeightKg),
+    lowStockThresholdKg: Number(req.body.lowStockThresholdKg),
   };
 
   if (!payload.businessName) {
@@ -93,6 +95,10 @@ export const updateSettings = asyncHandler(async (req, res) => {
 
   if (!Number.isFinite(payload.bagWeightKg) || payload.bagWeightKg <= 0) {
     throw httpError(400, 'Bag weight must be greater than 0.');
+  }
+
+  if (!Number.isFinite(payload.lowStockThresholdKg) || payload.lowStockThresholdKg < 0) {
+    throw httpError(400, 'Low-stock threshold must be a number of 0 or more.');
   }
 
   const settings = await BusinessSettings.findOneAndUpdate(

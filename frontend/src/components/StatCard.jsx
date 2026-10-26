@@ -1,7 +1,13 @@
 import NavIcon from './NavIcon';
 import { formatINR } from '../utils/format';
 
-const StatCard = ({ title, value = 0, icon = 'dashboard', hint = 'No entries yet' }) => (
+const StatCard = ({
+  title,
+  value = 0,
+  icon = 'dashboard',
+  hint = 'No entries yet',
+  formatValue = formatINR,
+}) => (
   <article className="card p-4 sm:p-5">
     <div className="flex items-start justify-between gap-3">
       <p className="text-sm font-medium text-ink-500">{title}</p>
@@ -10,7 +16,7 @@ const StatCard = ({ title, value = 0, icon = 'dashboard', hint = 'No entries yet
       </span>
     </div>
     <p className="mt-3 text-2xl font-semibold tracking-tight text-ink-900">
-      {value === null || value === undefined ? '—' : formatINR(value)}
+      {value === null || value === undefined ? '—' : formatValue(value)}
     </p>
     <p className="mt-1 text-xs text-ink-400">{hint}</p>
   </article>

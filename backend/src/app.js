@@ -8,6 +8,7 @@ import authRoutes from './routes/authRoutes.js';
 import productRoutes from './routes/productRoutes.js';
 import saleRoutes from './routes/saleRoutes.js';
 import settingsRoutes from './routes/settingsRoutes.js';
+import stockRoutes from './routes/stockRoutes.js';
 import { errorHandler, notFound } from './middleware/errorMiddleware.js';
 
 export const app = express();
@@ -33,6 +34,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/settings', settingsRoutes);
 app.use('/api/products', productRoutes);
 app.use('/api/sales', saleRoutes);
+app.use('/api/stock', stockRoutes);
 
 app.use(notFound);
 app.use(errorHandler);

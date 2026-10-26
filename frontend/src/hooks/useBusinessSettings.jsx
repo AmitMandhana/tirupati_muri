@@ -15,6 +15,7 @@ export const DEFAULT_BUSINESS_SETTINGS = {
   retailMuriRate: 45,
   wholesaleMuriRate: 42,
   bagWeightKg: 50,
+  lowStockThresholdKg: 100,
 };
 
 const BusinessSettingsContext = createContext(null);
