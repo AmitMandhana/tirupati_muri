@@ -476,8 +476,8 @@ const StockPage = () => {
                 </button>
               </div>
               <p className="mt-3 text-xs leading-relaxed text-ink-400">
-                Retail sales are deducted automatically when a bill is completed. Production and
-                wholesale deductions will use the same ledger.
+                Retail bills and wholesale invoices are deducted automatically. Every other stock
+                movement is written to the same ledger.
               </p>
             </section>
 

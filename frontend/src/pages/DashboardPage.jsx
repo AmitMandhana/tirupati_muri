@@ -156,9 +156,10 @@ const DashboardPage = () => {
             </h1>
             <p className="mt-1 text-sm font-medium text-ink-500">Business Management System</p>
             <p className="mt-4 max-w-2xl text-sm leading-relaxed text-ink-500">
-              Welcome back{firstName ? `, ${firstName}` : ''}. Retail billing and stock are live:
-              today&apos;s sales and Muri stock below come from recorded bills and stock
-              transactions. Accounting figures will fill in as later modules are added.
+              Welcome back{firstName ? `, ${firstName}` : ''}. Retail billing, wholesale invoicing
+              and stock are live. Today&apos;s retail sales and Muri stock below come from recorded
+              bills and stock transactions; wholesale totals are on the Wholesale page.
+              Accounting figures will fill in as later modules are added.
             </p>
           </div>
           <div className="hidden shrink-0 sm:block">
@@ -248,8 +249,9 @@ const DashboardPage = () => {
           </span>
           <h2 className="mt-4 text-base font-semibold text-ink-900">What is included now</h2>
           <p className="mt-2 text-sm leading-relaxed text-ink-500">
-            Sign-in, business settings, the product catalogue, retail billing and stock tracking
-            are ready. Production, staff, loan and reporting modules will be added step by step.
+            Sign-in, business settings, the product catalogue, retail billing, wholesale
+            invoicing and stock tracking are ready. Production, staff, loan and reporting modules
+            will be added step by step.
           </p>
           <Link
             to="/settings"

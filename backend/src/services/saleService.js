@@ -5,7 +5,7 @@ import { Sale } from '../models/Sale.js';
 import { getNextRetailBillNumber } from './billNumberService.js';
 import {
   attachSaleReference,
-  releaseRetailReservation,
+  releaseStockReservation,
   reserveRetailStock,
 } from './stockService.js';
 import { httpError } from '../utils/httpError.js';
@@ -136,7 +136,7 @@ export const createRetailSale = async (body = {}) => {
       notes,
     });
   } catch (error) {
-    await releaseRetailReservation(reservation);
+    await releaseStockReservation(reservation);
     throw error;
   }
 

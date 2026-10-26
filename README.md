@@ -2,9 +2,9 @@
 
 A cloud-based business management web application for a puffed rice (muri) mill. This release
 includes authentication, the application shell, the dashboard, business settings, the product
-master, fast retail billing with printable thermal receipts and a ledger-based Muri stock
-module. Wholesale, production, staff, loans and reports are represented by clearly marked
-"Coming Soon" pages and will be added in later phases.
+master, fast retail billing with printable thermal receipts, a ledger-based Muri stock module
+and wholesale invoicing with A4 invoices. Party ledgers, production, staff, loans and reports
+are represented by clearly marked "Coming Soon" pages and will be added in later phases.
 
 ## Tech stack
 
@@ -21,22 +21,22 @@ murii/
 │   ├── .env.example
 │   └── src/
 │       ├── config/        # environment loading and database connection
-│       ├── controllers/   # auth, settings, product, sale and stock handlers
+│       ├── controllers/   # auth, settings, product, sale, stock, party and invoice handlers
 │       ├── middleware/    # JWT auth, error handling
-│       ├── models/        # User, BusinessSettings, Product, Sale, Counter, ProductStock, StockTransaction
-│       ├── routes/        # /api/auth, /api/settings, /api/products, /api/sales, /api/stock
-│       ├── services/      # token signing, product seed, sales, bill numbers, stock movements
+│       ├── models/        # User, BusinessSettings, Product, Sale, Counter, ProductStock, StockTransaction, Party, WholesaleInvoice
+│       ├── routes/        # /api/auth, /api/settings, /api/products, /api/sales, /api/stock, /api/parties, /api/invoices
+│       ├── services/      # token signing, product seed, sales, wholesale invoices, bill numbers, stock movements
 │       ├── utils/         # async wrapper, HTTP errors, validators, stock types
 │       ├── app.js         # Express app
 │       └── server.js      # startup entry point
 └── frontend/
     └── src/
-        ├── components/    # layout pieces, form fields, dialogs, stock movement dialog, receipt, icons
+        ├── components/    # layout pieces, form fields, dialogs, receipt, invoice sheet, icons
         ├── hooks/         # authentication and business-settings contexts
         ├── layouts/       # sidebar + header application shell
-        ├── pages/         # login, dashboard, settings, products, retail billing, stock, placeholders
+        ├── pages/         # login, dashboard, settings, products, retail billing, stock, wholesale, placeholders
         ├── services/      # Axios instance and API calls
-        └── utils/         # currency, dates, validation, billing and stock helpers, receipt PDF
+        └── utils/         # currency, dates, validation, billing, stock, invoice helpers and PDFs
 ```
 
 ## Prerequisites
@@ -180,7 +180,7 @@ section of the sidebar to:
 
 - search, add and edit products with their retail rate, wholesale rate and bag weight;
 - deactivate a product, which keeps it in the catalogue but removes it from
-  `GET /api/products?active=true` (the list future sales screens will use).
+  `GET /api/products?active=true` (the list the retail and wholesale screens use).
 
 Products are never hard-deleted, so future transactions can keep referring to them.
 
@@ -249,7 +249,8 @@ The Stock page shows:
 - the configured minimum stock and when the last movement happened;
 - the **stock ledger** with date, transaction type, reference, in, out and running balance;
 - actions for **Add stock** (purchase/stock addition), **Record wastage** and **Adjust stock**
-  (signed correction). Retail sales are added automatically from the billing screen.
+  (signed correction). Retail sales and wholesale invoices are added automatically from their
+  billing screens.
 
 The balance follows one rule, implemented in one place
 (`backend/src/services/stockService.js`):
@@ -276,6 +277,15 @@ The sale is not saved, the stock balance is unchanged, and the bill number is no
 The billing screen also warns before submission when the calculated quantity exceeds the
 available stock.
 
+### Wholesale invoices and stock
+
+Saving a wholesale invoice deducts its quantity with the same atomic conditional update and
+writes a **Wholesale Sale** ledger entry that references the invoice number, for example
+`INV-000001`. The invoice is rejected with `Insufficient Muri stock. Available: <quantity> KG.`
+when the quantity exceeds the balance; nothing is saved, the stock balance is unchanged, and no
+invoice number is consumed. The wholesale screen shows the available stock and warns before
+submission. See [Wholesale invoices](#10-wholesale-invoices).
+
 ### Low-stock threshold
 
 Set the minimum stock in **Settings → Rates and packaging** (default 100 KG). When a product
@@ -292,9 +302,76 @@ stock service, and the dashboard warning links to the Stock page.
 
 The ledger already understands Opening Stock, Production, Retail Sale, Wholesale Sale, Wastage,
 Adjustment and Purchase/Stock Addition. This release writes opening stock, purchases, wastage,
-adjustments and retail sales. **Production and wholesale deductions are not implemented yet**;
-when those modules are added they will call the same `applySignedMovement` service so the
-balance and ledger stay consistent.
+adjustments, retail sales and wholesale sales. **Production is not implemented yet**; when that
+module is added it will call the same `applySignedMovement` service so the balance and ledger
+stay consistent.
+
+## 10. Wholesale invoices
+
+Open **Wholesale** from the Operations section. The page has two tabs: **New invoice** and
+**Invoice history**.
+
+### Parties
+
+Wholesale invoices are raised against a party. Click **Add party** (or add one from the empty
+state), enter the party name, a phone number and an optional address, and save. Parties are
+listed alphabetically and searched by name or phone. The party name and phone are copied onto
+each invoice when it is saved, so later edits do not change historical invoices. This release
+creates and lists parties only; the **party ledger is not implemented yet**, so the standalone
+Parties page remains a placeholder and parties are created from the Wholesale screen.
+
+### Creating an invoice
+
+1. Select an existing **party**.
+2. Select an active **product**. Muri is selected automatically when present.
+3. The **rate** is prefilled from the product's wholesale rate and can be adjusted for this
+   invoice; it is never hard-coded.
+4. Enter the **quantity** in the product unit (KG for Muri). The invoice total is calculated
+   live from `quantity × rate`.
+5. Choose **Cash**, **UPI**, **Bank** or **Credit**.
+6. Enter the **amount received**, or use **Full payment** / **No payment**. The balance due is
+   calculated live as `total − paid` and cannot be negative; an amount greater than the total
+   is rejected.
+7. Optionally add notes (printed on the invoice), then click **Save invoice**.
+
+For example, 500 KG × ₹50 = **₹25,000**. With ₹10,000 received, the invoice has **paid
+₹10,000** and **due ₹15,000**, and its status is **Partially Paid**. Saving it also deducts
+500 KG from stock (1,000 KG → 500 KG) and writes a Wholesale Sale row to the ledger referencing
+`INV-000001`.
+
+Invoice numbers are sequential and concurrency-safe: `INV-000001`, `INV-000002`, and so on.
+Numbers are generated on the server after stock is reserved, so a rejected invoice never
+consumes a number. Each invoice stores the number, party reference and name/phone snapshot,
+product reference and name/unit snapshot, quantity, rate, amount, total, paid, due, payment
+method, status, notes and timestamps. Paid and due are stored per invoice; no single running
+party balance is kept.
+
+Statuses are derived from the amounts: **Paid** (`due` is zero), **Partially Paid** (some
+amount received), and **Credit** (nothing received).
+
+### A4 invoice, print and PDF
+
+After saving, the invoice dialog shows an A4-styled preview with the business header from
+Settings (name, address, phone, email, GSTIN), invoice number, date, status, party details, the
+product line (quantity, rate, amount), the payment method and notes, and the Total, Paid and
+Due totals plus the invoice footer.
+
+- **Print invoice** uses the browser print dialog with `@media print` rules that hide the
+  application and print only the A4 invoice (`@page size: A4`).
+- **Download PDF** saves `invoice-<number>.pdf` with the same A4 layout. The PDF uses `Rs.`
+  instead of `₹` because the built-in PDF fonts do not include the rupee glyph.
+- **New invoice** closes the dialog and clears the quantities for the next sale.
+
+### Invoice history
+
+The **Invoice history** tab lists invoices newest first with invoice number, date, party,
+total, paid, due, status and a **View** action that reopens the printable invoice. Three
+summary cards show **Invoice sales**, **Amount received** and **Balance due** for the current
+filter, calculated on the server from invoice-level records.
+
+Search matches the invoice number, party name or phone. **From date** and **To date** filter by
+invoice date; both bounds are inclusive and the list shows the latest 200 matching invoices.
+**Clear filters** resets the search and dates.
 
 ## API endpoints
 
@@ -318,6 +395,11 @@ balance and ledger stay consistent.
 | POST   | `/api/stock/opening` | Yes | Record opening stock once per product |
 | POST   | `/api/stock/movements` | Yes | Record a purchase, wastage or adjustment |
 | GET    | `/api/stock/:productId/ledger` | Yes | Stock ledger for one product (optional `limit`, max 200) |
+| GET    | `/api/parties`     | Yes  | List parties (optional `search` on name or phone) |
+| POST   | `/api/parties`     | Yes  | Create a party (name, phone, optional address) |
+| GET    | `/api/invoices`    | Yes  | List wholesale invoices with a filtered summary (`search`, `from`, `to`, `limit`) |
+| POST   | `/api/invoices`    | Yes  | Create a wholesale invoice and deduct stock |
+| GET    | `/api/invoices/:id`| Yes  | Read one wholesale invoice           |
 
 Protected routes expect `Authorization: Bearer <token>`. Products are never deleted; use
 `PUT /api/products/:id` with `{ "active": false }` to retire one.
@@ -326,13 +408,24 @@ Protected routes expect `Authorization: Bearer <token>`. Products are never dele
 same product returns `409`; use an adjustment instead. `POST /api/stock/movements` accepts
 `{ product, type, quantity, notes? }` where `type` is `purchase`, `wastage` or `adjustment`.
 Purchase and wastage quantities must be positive (wastage is stored as a negative movement);
-adjustments are signed and cannot take the balance below zero. Production and wholesale
-movements are rejected until those modules are built.
+adjustments are signed and cannot take the balance below zero. Production movements are
+rejected until that module is built; wholesale deductions are written only by
+`POST /api/invoices`.
 
 `POST /api/sales` accepts `{ product, inputMode, amount | quantity, rate?, paymentMethod,
 customerName?, notes? }`. `inputMode` is `amount` (default) or `quantity`; `rate` defaults to
 the product's retail rate. Credit sales require `customerName`. Bill numbers are generated on
 the server and cannot be supplied by the client.
+
+`POST /api/parties` accepts `{ name, phone, address? }`. Phone is required and validated; the
+address is optional.
+
+`POST /api/invoices` accepts `{ partyId, productId, quantity, rate?, paid?, paymentMethod?,
+notes? }`. `rate` defaults to the product's wholesale rate, `paid` defaults to `0` and cannot
+exceed the calculated total, and `paymentMethod` is `cash` (default), `upi`, `bank` or
+`credit`. The server calculates `total`, `due`, status and the invoice number. `GET
+/api/invoices` returns `{ invoices, summary }`, where the summary applies the same search/date
+filters as the list.
 
 ## What is included in this release
 
@@ -351,21 +444,30 @@ the server and cannot be supplied by the client.
 - Stock ledger with opening stock, purchases, wastage and adjustments, current KG and bag count
 - Atomic stock deduction on retail sales with exact insufficient-stock rejection and no bill-number gaps
 - Real Muri stock on the dashboard with a configurable low-stock warning
+- Party creation and listing for wholesale invoicing
+- Wholesale invoices with live total, paid and due calculation and cash/UPI/bank/credit payment
+- Sequential invoice numbers (`INV-000001`, `INV-000002`, ...) that are not consumed by rejected invoices
+- Invoice-level paid and due tracking with Paid, Partially Paid and Credit statuses
+- Atomic wholesale stock deduction with ledger entries referencing the invoice number
+- A4 invoice preview, browser printing and PDF download
+- Invoice history with server-side search, inclusive date filters and filtered sales/received/due summaries
 - "Coming Soon" placeholders for all future modules
 - Server-side validation, consistent error responses, loading and empty states, toasts
 
 ## What is intentionally not included yet
 
-Wholesale billing, parties, production, staff, expenses, cash book, bank accounts, loans,
-reports and WhatsApp integration. Production and wholesale stock deductions are not
-implemented; their transaction types exist in the stock architecture for later use. No fake
-invoices, stock, transactions or accounting calculations are generated by this release.
+The complete party ledger, production, staff, expenses, cash book, bank accounts, loans,
+reports and WhatsApp integration. Wholesale tracking is per invoice only: there is no running
+party balance, payment history beyond each invoice's paid and due amounts, or party statement
+yet. Production stock deductions are not implemented; the transaction type exists in the stock
+architecture for later use. No fake invoices, stock, transactions or accounting calculations
+are generated by this release.
 
 ## Notes
 
 - Currency is formatted for India with the `en-IN` locale, e.g. `₹1,00,000`.
-- Receipt PDFs use `Rs.` instead of `₹` because the built-in PDF fonts do not include the
-  rupee glyph. On-screen and printed receipts show `₹`.
+- Receipt and invoice PDFs use `Rs.` instead of `₹` because the built-in PDF fonts do not
+  include the rupee glyph. On-screen and printed documents show `₹`.
 - The interface is English-only and designed desktop-first, with a responsive mobile drawer.
 - The frontend dev server proxies `/api` to `http://localhost:5000`. If you change `PORT`,
   update `frontend/vite.config.js` (or set `VITE_API_URL`).

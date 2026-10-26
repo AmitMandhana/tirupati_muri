@@ -309,6 +309,14 @@ export const reserveRetailStock = async (product, quantity) =>
     referenceType: 'sale',
   });
 
+export const reserveWholesaleStock = async (product, quantity) =>
+  applySignedMovement({
+    product,
+    type: 'wholesaleSale',
+    delta: -roundQuantity(quantity),
+    referenceType: 'sale',
+  });
+
 export const attachSaleReference = async (transactionId, billNumber) => {
   await StockTransaction.updateOne(
     { _id: transactionId },
@@ -316,7 +324,7 @@ export const attachSaleReference = async (transactionId, billNumber) => {
   );
 };
 
-export const releaseRetailReservation = async (reservation) => {
+export const releaseStockReservation = async (reservation) => {
   await ProductStock.updateOne(
     { product: reservation.transaction.product },
     { $inc: { quantity: -reservation.transaction.quantity } },

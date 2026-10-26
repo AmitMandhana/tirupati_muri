@@ -5,10 +5,12 @@ import morgan from 'morgan';
 
 import { env } from './config/env.js';
 import authRoutes from './routes/authRoutes.js';
+import partyRoutes from './routes/partyRoutes.js';
 import productRoutes from './routes/productRoutes.js';
 import saleRoutes from './routes/saleRoutes.js';
 import settingsRoutes from './routes/settingsRoutes.js';
 import stockRoutes from './routes/stockRoutes.js';
+import wholesaleInvoiceRoutes from './routes/wholesaleInvoiceRoutes.js';
 import { errorHandler, notFound } from './middleware/errorMiddleware.js';
 
 export const app = express();
@@ -35,6 +37,8 @@ app.use('/api/settings', settingsRoutes);
 app.use('/api/products', productRoutes);
 app.use('/api/sales', saleRoutes);
 app.use('/api/stock', stockRoutes);
+app.use('/api/parties', partyRoutes);
+app.use('/api/invoices', wholesaleInvoiceRoutes);
 
 app.use(notFound);
 app.use(errorHandler);

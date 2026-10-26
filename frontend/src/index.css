@@ -126,7 +126,20 @@
     display: none !important;
   }
 
+  body > *:not(.invoice-portal) {
+    display: none !important;
+  }
+
   .receipt-portal {
+    position: static !important;
+    inset: auto !important;
+    display: block !important;
+    overflow: visible !important;
+    padding: 0 !important;
+    background: #fff !important;
+  }
+
+  .invoice-portal {
     position: static !important;
     inset: auto !important;
     display: block !important;
@@ -139,7 +152,20 @@
     display: none !important;
   }
 
+  .invoice-portal .invoice-chrome {
+    display: none !important;
+  }
+
   .receipt-portal .receipt-shell {
+    margin: 0 !important;
+    max-width: none !important;
+    overflow: visible !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+  }
+
+  .invoice-portal .invoice-shell {
     margin: 0 !important;
     max-width: none !important;
     overflow: visible !important;
@@ -154,9 +180,27 @@
     background: #fff !important;
   }
 
+  .invoice-portal .invoice-stage {
+    display: block !important;
+    overflow: visible !important;
+    padding: 0 !important;
+    background: #fff !important;
+  }
+
   .receipt-portal .receipt-paper {
     width: var(--receipt-width) !important;
     margin: 0 !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+  }
+
+  .invoice-portal .invoice-paper {
+    width: 210mm !important;
+    max-width: none !important;
+    min-height: 297mm !important;
+    margin: 0 !important;
+    padding: 14mm 16mm !important;
     border: 0 !important;
     border-radius: 0 !important;
     box-shadow: none !important;
