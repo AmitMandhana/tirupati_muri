@@ -1,5 +1,7 @@
 import mongoose from 'mongoose';
 
+import { cancelledPlugin } from './plugins/cancelled.js';
+
 export const WHOLESALE_PAYMENT_METHODS = ['cash', 'upi', 'bank', 'credit'];
 export const WHOLESALE_INVOICE_STATUSES = ['paid', 'partial', 'credit'];
 
@@ -112,5 +114,6 @@ const wholesaleInvoiceSchema = new mongoose.Schema(
 wholesaleInvoiceSchema.index({ createdAt: -1 });
 wholesaleInvoiceSchema.index({ party: 1, createdAt: -1 });
 wholesaleInvoiceSchema.index({ status: 1, createdAt: -1 });
+wholesaleInvoiceSchema.plugin(cancelledPlugin);
 
 export const WholesaleInvoice = mongoose.model('WholesaleInvoice', wholesaleInvoiceSchema);

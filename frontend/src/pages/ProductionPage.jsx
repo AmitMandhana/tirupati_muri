@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
 
+import CancelTransactionDialog from '../components/CancelTransactionDialog';
 import FormField from '../components/FormField';
 import NavIcon from '../components/NavIcon';
 import PageHeader from '../components/PageHeader';
@@ -9,6 +10,7 @@ import ProductionReportDialog from '../components/ProductionReportDialog';
 import Spinner from '../components/Spinner';
 import StatCard from '../components/StatCard';
 import { useBusinessSettings } from '../hooks/useBusinessSettings';
+import { cancelProductionApi } from '../services/cancelService';
 import { getProductionsApi } from '../services/productionService';
 import { getApiErrorMessage } from '../utils/errors';
 import { formatQuantity, formatReceiptDate } from '../utils/format';
@@ -29,6 +31,8 @@ const ProductionPage = () => {
   const [refreshToken, setRefreshToken] = useState(0);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [isReportOpen, setIsReportOpen] = useState(false);
+  const [cancelTarget, setCancelTarget] = useState(null);
+  const [isCancelling, setIsCancelling] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
@@ -103,8 +107,26 @@ const ProductionPage = () => {
     refresh();
   };
 
-  const handleDownloadPdf = async () => {
+  const handleCancelProduction = async (reason) => {
+    if (!cancelTarget) {
+      return;
+    }
+
+    setIsCancelling(true);
+
     try {
+      const data = await cancelProductionApi(cancelTarget._id, reason);
+      toast.success(data.message ?? 'Production cancelled.');
+      setCancelTarget(null);
+      refresh();
+    } catch (error) {
+      toast.error(getApiErrorMessage(error, 'Unable to cancel the production record.'));
+    } finally {
+      setIsCancelling(false);
+    }
+  };
+
+  const handleDownloadPdf = async () => {    try {
       await downloadProductionPdf(productions, settings, filters);
       toast.success('Production PDF downloaded.');
     } catch {
@@ -299,6 +321,9 @@ const ProductionPage = () => {
                     <th scope="col" className="px-5 py-3 text-right font-semibold">
                       Yield
                     </th>
+                    <th scope="col" className="px-5 py-3 text-right font-semibold">
+                      Actions
+                    </th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-cream-200">
@@ -334,6 +359,15 @@ const ProductionPage = () => {
                           {formatQuantity(production.rawMaterialPerKg)} KG raw / KG
                         </p>
                       </td>
+                      <td className="whitespace-nowrap px-5 py-3.5 text-right">
+                        <button
+                          type="button"
+                          className="rounded-md border border-red-200 px-2.5 py-1.5 text-xs font-semibold text-red-700 transition-colors hover:bg-red-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400/40"
+                          onClick={() => setCancelTarget(production)}
+                        >
+                          Cancel
+                        </button>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -341,7 +375,8 @@ const ProductionPage = () => {
             </div>
             <p className="border-t border-cream-200 px-5 py-3 text-[11px] text-ink-400">
               Showing up to 200 production records. Finished Muri is added to stock when a record
-              is saved; raw material stays on the production record only.
+              is saved; raw material stays on the production record only. Cancelling a record
+              reverses its finished Muri from stock.
             </p>
           </>
         )}
@@ -359,6 +394,17 @@ const ProductionPage = () => {
           productions={productions}
           filters={filters}
           onClose={() => setIsReportOpen(false)}
+        />
+      ) : null}
+
+      {cancelTarget ? (
+        <CancelTransactionDialog
+          title={`Cancel production ${cancelTarget.productionNumber}?`}
+          description={`${formatQuantity(cancelTarget.finishedKg)} ${cancelTarget.unit} of finished ${cancelTarget.productName ?? 'Muri'} will be removed from stock and the batch will be marked CANCELLED in the audit trail. This cannot be undone.`}
+          confirmText="Cancel production"
+          isSaving={isCancelling}
+          onConfirm={handleCancelProduction}
+          onClose={() => setCancelTarget(null)}
         />
       ) : null}
     </div>

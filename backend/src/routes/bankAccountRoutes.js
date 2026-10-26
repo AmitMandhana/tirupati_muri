@@ -1,5 +1,6 @@
 import { Router } from 'express';
 
+import { cancelBankTransactionHandler } from '../controllers/cancellationController.js';
 import {
   addBankAccount,
   addBankTransaction,
@@ -20,5 +21,6 @@ router.post('/transfer', transferFunds);
 router.get('/:id', getBankAccount);
 router.put('/:id', editBankAccount);
 router.post('/:id/transactions', addBankTransaction);
+router.post('/:id/transactions/:transactionId/cancel', cancelBankTransactionHandler);
 
 export default router;

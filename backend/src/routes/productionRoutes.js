@@ -1,5 +1,6 @@
 import { Router } from 'express';
 
+import { cancelProductionHandler } from '../controllers/cancellationController.js';
 import {
   addProduction,
   getProductions,
@@ -14,5 +15,6 @@ router.use(requireAuth);
 router.get('/', getProductions);
 router.post('/', addProduction);
 router.get('/summary', getSummary);
+router.post('/:id/cancel', cancelProductionHandler);
 
 export default router;

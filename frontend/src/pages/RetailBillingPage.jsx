@@ -2,12 +2,14 @@ import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import toast from 'react-hot-toast';
 
+import CancelTransactionDialog from '../components/CancelTransactionDialog';
 import FormField from '../components/FormField';
 import NavIcon from '../components/NavIcon';
 import PageHeader from '../components/PageHeader';
 import SaleReceiptDialog from '../components/SaleReceiptDialog';
 import Spinner from '../components/Spinner';
 import { createSaleApi, getSalesApi } from '../services/saleService';
+import { cancelSaleApi } from '../services/cancelService';
 import { getProductsApi } from '../services/productService';
 import { getStockOverviewApi } from '../services/stockService';
 import { PAYMENT_METHODS, getPaymentLabel } from '../utils/billing';
@@ -58,6 +60,8 @@ const RetailBillingPage = () => {
 
   const [receiptSale, setReceiptSale] = useState(null);
   const [receiptMode, setReceiptMode] = useState('completed');
+  const [cancelTarget, setCancelTarget] = useState(null);
+  const [isCancelling, setIsCancelling] = useState(false);
 
   const [stockByProduct, setStockByProduct] = useState({});
   const [stockToken, setStockToken] = useState(0);
@@ -328,6 +332,28 @@ const RetailBillingPage = () => {
   const openReceipt = (sale) => {
     setReceiptMode('view');
     setReceiptSale(sale);
+  };
+
+  const handleCancelSale = async (reason) => {
+    if (!cancelTarget) {
+      return;
+    }
+
+    setIsCancelling(true);
+
+    try {
+      const data = await cancelSaleApi(cancelTarget._id, reason);
+      toast.success(data.message ?? 'Bill cancelled.');
+      setCancelTarget(null);
+      setIsLoadingRecent(true);
+      setRecentError('');
+      setRecentToken((token) => token + 1);
+      setStockToken((token) => token + 1);
+    } catch (error) {
+      toast.error(getApiErrorMessage(error, 'Unable to cancel the bill.'));
+    } finally {
+      setIsCancelling(false);
+    }
   };
 
   const showBillingForm = !isLoadingProducts && !productsError && products.length > 0;
@@ -751,6 +777,13 @@ const RetailBillingPage = () => {
                       >
                         View
                       </button>
+                      <button
+                        type="button"
+                        onClick={() => setCancelTarget(sale)}
+                        className="shrink-0 rounded-md border border-red-200 px-2.5 py-1.5 text-xs font-semibold text-red-700 transition-colors hover:bg-red-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400/40"
+                      >
+                        Cancel
+                      </button>
                     </li>
                   ))}
                 </ul>
@@ -771,6 +804,17 @@ const RetailBillingPage = () => {
           mode={receiptMode}
           onClose={closeReceipt}
           onNewSale={handleNewSale}
+        />
+      ) : null}
+
+      {cancelTarget ? (
+        <CancelTransactionDialog
+          title={`Cancel bill ${cancelTarget.billNumber}?`}
+          description={`${formatINR2(cancelTarget.amount)} and ${formatQuantity(cancelTarget.quantity)} ${cancelTarget.unit} of ${cancelTarget.productName} will be reversed, the stock will be restored, and the bill will be marked CANCELLED in the audit trail. This cannot be undone.`}
+          confirmText="Cancel bill"
+          isSaving={isCancelling}
+          onConfirm={handleCancelSale}
+          onClose={() => setCancelTarget(null)}
         />
       ) : null}
     </div>

@@ -1,5 +1,6 @@
 import { Router } from 'express';
 
+import { cancelPartyPaymentHandler } from '../controllers/cancellationController.js';
 import {
   addParty,
   addPartyPayment,
@@ -20,5 +21,6 @@ router.get('/receivables', getReceivables);
 router.get('/:id', getParty);
 router.put('/:id', editParty);
 router.post('/:id/payments', addPartyPayment);
+router.post('/:id/payments/:paymentId/cancel', cancelPartyPaymentHandler);
 
 export default router;

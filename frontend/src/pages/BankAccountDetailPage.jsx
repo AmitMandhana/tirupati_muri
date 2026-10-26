@@ -1,16 +1,21 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
+import toast from 'react-hot-toast';
 
 import BankAccountFormDialog from '../components/BankAccountFormDialog';
 import BankTransactionDialog from '../components/BankTransactionDialog';
 import BankTransferDialog from '../components/BankTransferDialog';
+import CancelTransactionDialog from '../components/CancelTransactionDialog';
 import NavIcon from '../components/NavIcon';
 import PageHeader from '../components/PageHeader';
 import Spinner from '../components/Spinner';
 import StatCard from '../components/StatCard';
+import { useBusinessSettings } from '../hooks/useBusinessSettings';
+import { cancelBankTransactionApi } from '../services/cancelService';
 import { getBankAccountApi, getBankAccountsApi } from '../services/bankAccountService';
 import { getApiErrorMessage } from '../utils/errors';
 import { formatINR2, formatReceiptDate } from '../utils/format';
+import { downloadLedgerPdf } from '../utils/ledgerPdf';
 
 const TYPE_LABELS = {
   opening: 'Opening',
@@ -40,8 +45,13 @@ const TYPE_PILL_CLASSES = {
   other: 'bg-cream-100 text-ink-600',
 };
 
+const isManualBankEntry = (entry) =>
+  entry.type !== 'opening' &&
+  (String(entry.reference ?? '').startsWith('BTX-') || entry.type === 'transfer');
+
 const BankAccountDetailPage = () => {
   const { id } = useParams();
+  const { settings } = useBusinessSettings();
 
   const [detail, setDetail] = useState(null);
   const [accounts, setAccounts] = useState([]);
@@ -51,6 +61,8 @@ const BankAccountDetailPage = () => {
   const [isTransactionOpen, setIsTransactionOpen] = useState(false);
   const [isTransferOpen, setIsTransferOpen] = useState(false);
   const [isEditOpen, setIsEditOpen] = useState(false);
+  const [cancelTarget, setCancelTarget] = useState(null);
+  const [isCancelling, setIsCancelling] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
@@ -143,6 +155,54 @@ const BankAccountDetailPage = () => {
     refresh();
   };
 
+  const handleCancelTransaction = async (reason) => {
+    if (!cancelTarget) {
+      return;
+    }
+
+    setIsCancelling(true);
+
+    try {
+      const data = await cancelBankTransactionApi(id, cancelTarget.id, reason);
+      toast.success(data.message ?? 'Bank transaction cancelled.');
+      setCancelTarget(null);
+      refresh();
+    } catch (error) {
+      toast.error(getApiErrorMessage(error, 'Unable to cancel the bank transaction.'));
+    } finally {
+      setIsCancelling(false);
+    }
+  };
+
+  const handleDownloadLedger = async () => {
+    try {
+      await downloadLedgerPdf({
+        title: 'Bank Ledger',
+        entityName: `${account.bankName} · ${account.accountName}`,
+        entityMeta: [account.maskedAccountNumber],
+        summary: [
+          { label: 'Opening balance', value: summary.openingBalance },
+          { label: 'Inflow', value: summary.inflow },
+          { label: 'Outflow', value: summary.outflow },
+          { label: 'Closing balance', value: summary.balance },
+        ],
+        rows: ledger.map((entry) => ({
+          date: entry.date,
+          reference: entry.reference,
+          description: entry.description,
+          debit: entry.in,
+          credit: entry.out,
+          balance: entry.balance,
+        })),
+        settings,
+        filename: `bank-ledger-${account.bankName.replace(/[^\w-]+/g, '-')}.pdf`,
+      });
+      toast.success('Bank ledger PDF downloaded.');
+    } catch {
+      toast.error('Unable to generate the bank ledger PDF.');
+    }
+  };
+
   return (
     <div>
       <Link
@@ -158,6 +218,13 @@ const BankAccountDetailPage = () => {
         description={`${account.accountName} · ${account.maskedAccountNumber}`}
         actions={
           <>
+            <button
+              type="button"
+              className="btn-secondary"
+              onClick={handleDownloadLedger}
+            >
+              Ledger PDF
+            </button>
             <button
               type="button"
               className="btn-secondary"
@@ -296,6 +363,9 @@ const BankAccountDetailPage = () => {
                   <th scope="col" className="px-5 py-3 text-right font-semibold">
                     Balance
                   </th>
+                  <th scope="col" className="px-5 py-3 text-right font-semibold">
+                    Actions
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-cream-200">
@@ -336,6 +406,24 @@ const BankAccountDetailPage = () => {
                     >
                       {formatINR2(entry.balance)}
                     </td>
+                    <td className="whitespace-nowrap px-5 py-3.5 text-right">
+                      {isManualBankEntry(entry) ? (
+                        <button
+                          type="button"
+                          className="rounded-md border border-red-200 px-2.5 py-1.5 text-xs font-semibold text-red-700 transition-colors hover:bg-red-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400/40"
+                          onClick={() => setCancelTarget(entry)}
+                        >
+                          Cancel
+                        </button>
+                      ) : (
+                        <span
+                          className="text-ink-400"
+                          title="This entry was created by another record. Cancel it from that record instead."
+                        >
+                          —
+                        </span>
+                      )}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -366,6 +454,21 @@ const BankAccountDetailPage = () => {
           account={account}
           onClose={() => setIsEditOpen(false)}
           onSaved={handleSaved}
+        />
+      ) : null}
+
+      {cancelTarget ? (
+        <CancelTransactionDialog
+          title={`Cancel ${TYPE_LABELS[cancelTarget.type] ?? cancelTarget.type} ${cancelTarget.reference}?`}
+          description={
+            cancelTarget.type === 'transfer'
+              ? `${formatINR2(cancelTarget.in > 0 ? cancelTarget.in : cancelTarget.out)} will be reversed on both bank accounts in this transfer and the entry will be marked CANCELLED in the audit trail. This cannot be undone.`
+              : `${formatINR2(cancelTarget.in > 0 ? cancelTarget.in : cancelTarget.out)} will be removed from this bank ledger and the entry will be marked CANCELLED in the audit trail. This cannot be undone.`
+          }
+          confirmText="Cancel transaction"
+          isSaving={isCancelling}
+          onConfirm={handleCancelTransaction}
+          onClose={() => setCancelTarget(null)}
         />
       ) : null}
     </div>

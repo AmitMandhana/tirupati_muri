@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import toast from 'react-hot-toast';
 
+import DataExportCard from '../components/DataExportCard';
 import FormField from '../components/FormField';
 import NavIcon from '../components/NavIcon';
 import PageHeader from '../components/PageHeader';
@@ -499,19 +500,23 @@ const SettingsPage = () => {
       {pageHeader}
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
-        <section className="card">
-          <div className="flex items-center gap-3 border-b border-cream-200 px-6 py-5">
-            <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-brand-50 text-brand-600">
-              <NavIcon name="settings" className="h-5 w-5" />
-            </span>
-            <div>
-              <h2 className="text-base font-semibold text-ink-900">Business profile</h2>
-              <p className="text-xs text-ink-500">Shown in the sidebar, header and dashboard.</p>
+        <div className="space-y-4">
+          <section className="card">
+            <div className="flex items-center gap-3 border-b border-cream-200 px-6 py-5">
+              <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-brand-50 text-brand-600">
+                <NavIcon name="settings" className="h-5 w-5" />
+              </span>
+              <div>
+                <h2 className="text-base font-semibold text-ink-900">Business profile</h2>
+                <p className="text-xs text-ink-500">Shown in the sidebar, header and dashboard.</p>
+              </div>
             </div>
-          </div>
 
-          <BusinessSettingsForm key={formKey} initialValues={settings} />
-        </section>
+            <BusinessSettingsForm key={formKey} initialValues={settings} />
+          </section>
+
+          <DataExportCard />
+        </div>
 
         <aside className="space-y-4">
           <section className="card p-6">

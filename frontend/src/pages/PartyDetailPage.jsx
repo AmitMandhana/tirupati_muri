@@ -1,12 +1,15 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
+import toast from 'react-hot-toast';
 
+import CancelTransactionDialog from '../components/CancelTransactionDialog';
 import PageHeader from '../components/PageHeader';
 import PartyFormDialog from '../components/PartyFormDialog';
 import ReceivePaymentDialog from '../components/ReceivePaymentDialog';
 import Spinner from '../components/Spinner';
 import StatCard from '../components/StatCard';
 import { useBusinessSettings } from '../hooks/useBusinessSettings';
+import { cancelPartyPaymentApi } from '../services/cancelService';
 import { getPartyApi } from '../services/partyService';
 import { getApiErrorMessage } from '../utils/errors';
 import {
@@ -15,7 +18,12 @@ import {
   formatRate,
   formatReceiptDate,
 } from '../utils/format';
-import { buildPaymentReminderMessage, buildWhatsAppUrl } from '../utils/whatsapp';
+import { downloadLedgerPdf } from '../utils/ledgerPdf';
+import {
+  buildLedgerMessage,
+  buildPaymentReminderMessage,
+  buildWhatsAppUrl,
+} from '../utils/whatsapp';
 
 const LEDGER_TYPE_LABELS = {
   opening: 'Opening',
@@ -32,6 +40,8 @@ const PartyDetailPage = () => {
   const [refreshToken, setRefreshToken] = useState(0);
   const [isPaymentOpen, setIsPaymentOpen] = useState(false);
   const [isEditOpen, setIsEditOpen] = useState(false);
+  const [cancelTarget, setCancelTarget] = useState(null);
+  const [isCancelling, setIsCancelling] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
@@ -65,6 +75,25 @@ const PartyDetailPage = () => {
     setIsLoading(true);
     setLoadError('');
     setRefreshToken((token) => token + 1);
+  };
+
+  const handleCancelPayment = async (reason) => {
+    if (!cancelTarget) {
+      return;
+    }
+
+    setIsCancelling(true);
+
+    try {
+      const data = await cancelPartyPaymentApi(partyId, cancelTarget.id, reason);
+      toast.success(data.message ?? 'Payment cancelled.');
+      setCancelTarget(null);
+      refresh();
+    } catch (error) {
+      toast.error(getApiErrorMessage(error, 'Unable to cancel the payment.'));
+    } finally {
+      setIsCancelling(false);
+    }
   };
 
   const backLink = (
@@ -129,9 +158,49 @@ const PartyDetailPage = () => {
     outstanding > 0.005
       ? buildWhatsAppUrl({ phone: party.phone, message: reminderMessage })
       : '';
+  const ledgerUrl = buildWhatsAppUrl({
+    phone: party.phone,
+    message: buildLedgerMessage({
+      partyName: party.name,
+      businessName: settings.businessName,
+      openingBalance: party.openingBalance,
+      invoicesTotal: stats.totalSales,
+      paymentsTotal: stats.totalReceived,
+      outstanding,
+    }),
+  });
   const reminderDisabled = !reminderUrl;
   const creditPercent =
     credit.limit > 0 ? Math.min((credit.used / credit.limit) * 100, 100) : 0;
+
+  const handleDownloadLedger = async () => {
+    try {
+      await downloadLedgerPdf({
+        title: 'Party Ledger',
+        entityName: party.name,
+        entityMeta: [party.phone, party.address],
+        summary: [
+          { label: 'Opening balance', value: party.openingBalance },
+          { label: 'Invoices', value: stats.totalSales },
+          { label: 'Payments received', value: stats.totalReceived },
+          { label: 'Outstanding', value: outstanding },
+        ],
+        rows: ledger.map((entry) => ({
+          date: entry.date,
+          reference: entry.reference,
+          description: entry.description,
+          debit: entry.debit,
+          credit: entry.credit,
+          balance: entry.balance,
+        })),
+        settings,
+        filename: `party-ledger-${party.name.replace(/[^\w-]+/g, '-')}.pdf`,
+      });
+      toast.success('Party ledger PDF downloaded.');
+    } catch {
+      toast.error('Unable to generate the party ledger PDF.');
+    }
+  };
 
   return (
     <div>
@@ -149,6 +218,15 @@ const PartyDetailPage = () => {
                 onClick={() => setIsEditOpen(true)}
               >
                 Edit party
+              </button>
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={handleDownloadLedger}
+                disabled={ledger.length === 0}
+                title={ledger.length === 0 ? 'There are no ledger entries yet.' : undefined}
+              >
+                Ledger PDF
               </button>
               {reminderDisabled ? (
                 <button
@@ -172,6 +250,26 @@ const PartyDetailPage = () => {
                 >
                   Send Payment Reminder
                 </a>
+              )}
+              {ledgerUrl ? (
+                <a
+                  href={ledgerUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="btn-secondary"
+                  title={`Send the ${party.name} ledger summary on WhatsApp`}
+                >
+                  Send Ledger on WhatsApp
+                </a>
+              ) : (
+                <button
+                  type="button"
+                  className="btn-secondary opacity-60"
+                  disabled
+                  title="Add a phone number before sending the ledger."
+                >
+                  Send Ledger on WhatsApp
+                </button>
               )}
               <button
                 type="button"
@@ -353,6 +451,9 @@ const PartyDetailPage = () => {
                       <th scope="col" className="px-5 py-3 text-right font-semibold">
                         Balance
                       </th>
+                      <th scope="col" className="px-5 py-3 text-right font-semibold">
+                        Actions
+                      </th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-cream-200">
@@ -397,13 +498,26 @@ const PartyDetailPage = () => {
                           >
                             {formatINR2(entry.balance)}
                           </td>
+                          <td className="whitespace-nowrap px-5 py-3.5 text-right">
+                            {entry.type === 'payment' ? (
+                              <button
+                                type="button"
+                                className="rounded-md border border-red-200 px-2.5 py-1.5 text-xs font-semibold text-red-700 transition-colors hover:bg-red-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400/40"
+                                onClick={() => setCancelTarget(entry)}
+                              >
+                                Cancel
+                              </button>
+                            ) : (
+                              <span className="text-ink-400">—</span>
+                            )}
+                          </td>
                         </tr>
                       );
                     })}
                   </tbody>
                   <tfoot>
                     <tr className="border-t border-cream-300 bg-cream-50/70">
-                      <td colSpan={5} className="px-5 py-3 text-right text-sm font-semibold text-ink-700">
+                      <td colSpan={6} className="px-5 py-3 text-right text-sm font-semibold text-ink-700">
                         Current outstanding
                       </td>
                       <td className="whitespace-nowrap px-5 py-3 text-right text-base font-semibold text-ink-900">
@@ -514,6 +628,17 @@ const PartyDetailPage = () => {
             setIsEditOpen(false);
             refresh();
           }}
+        />
+      ) : null}
+
+      {cancelTarget ? (
+        <CancelTransactionDialog
+          title={`Cancel payment ${cancelTarget.reference}?`}
+          description={`${formatINR2(cancelTarget.credit)} received from ${party.name} will be reversed from the party ledger and any linked bank receipt will be cancelled. The payment will stay visible as CANCELLED in the audit trail. This cannot be undone.`}
+          confirmText="Cancel payment"
+          isSaving={isCancelling}
+          onConfirm={handleCancelPayment}
+          onClose={() => setCancelTarget(null)}
         />
       ) : null}
     </div>

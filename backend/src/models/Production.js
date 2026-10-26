@@ -1,5 +1,7 @@
 import mongoose from 'mongoose';
 
+import { cancelledPlugin } from './plugins/cancelled.js';
+
 const productionSchema = new mongoose.Schema(
   {
     productionNumber: {
@@ -61,5 +63,6 @@ const productionSchema = new mongoose.Schema(
 );
 
 productionSchema.index({ productionDate: -1, _id: -1 });
+productionSchema.plugin(cancelledPlugin);
 
 export const Production = mongoose.model('Production', productionSchema);

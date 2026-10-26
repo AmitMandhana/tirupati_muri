@@ -132,6 +132,19 @@ const icons = {
       <path d="M5 20.5v-1a5 5 0 0 1 5-5h4a5 5 0 0 1 5 5v1" />
     </>
   ),
+  download: (
+    <>
+      <path d="M12 3v11m0 0 4.5-4.5M12 14 7.5 9.5" />
+      <path d="M4 16.5V19a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2.5" />
+    </>
+  ),
+  audit: (
+    <>
+      <path d="M6 3h9l4 4v14H6a1.5 1.5 0 0 1-1.5-1.5v-15A1.5 1.5 0 0 1 6 3Z" />
+      <path d="M14.5 3v4.5H19" />
+      <path d="M9 12h6M9 16h4" />
+    </>
+  ),
 };
 
 const NavIcon = ({ name, className = 'h-[18px] w-[18px]' }) => (

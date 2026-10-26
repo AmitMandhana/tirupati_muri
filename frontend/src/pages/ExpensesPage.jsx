@@ -1,11 +1,14 @@
 import { useEffect, useState } from 'react';
+import toast from 'react-hot-toast';
 
+import CancelTransactionDialog from '../components/CancelTransactionDialog';
 import ExpenseFormDialog from '../components/ExpenseFormDialog';
 import FormField from '../components/FormField';
 import NavIcon from '../components/NavIcon';
 import PageHeader from '../components/PageHeader';
 import Spinner from '../components/Spinner';
 import StatCard from '../components/StatCard';
+import { cancelExpenseApi } from '../services/cancelService';
 import { getExpenseCategoriesApi, getExpensesApi } from '../services/expenseService';
 import { getApiErrorMessage } from '../utils/errors';
 import { formatINR2, formatReceiptDate } from '../utils/format';
@@ -24,6 +27,8 @@ const ExpensesPage = () => {
   const [loadError, setLoadError] = useState('');
   const [refreshToken, setRefreshToken] = useState(0);
   const [isFormOpen, setIsFormOpen] = useState(false);
+  const [cancelTarget, setCancelTarget] = useState(null);
+  const [isCancelling, setIsCancelling] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
@@ -123,6 +128,25 @@ const ExpensesPage = () => {
   const handleSaved = () => {
     setIsFormOpen(false);
     refresh();
+  };
+
+  const handleCancelExpense = async (reason) => {
+    if (!cancelTarget) {
+      return;
+    }
+
+    setIsCancelling(true);
+
+    try {
+      const data = await cancelExpenseApi(cancelTarget._id, reason);
+      toast.success(data.message ?? 'Expense cancelled.');
+      setCancelTarget(null);
+      refresh();
+    } catch (error) {
+      toast.error(getApiErrorMessage(error, 'Unable to cancel the expense.'));
+    } finally {
+      setIsCancelling(false);
+    }
   };
 
   const entryCount = summary?.count ?? 0;
@@ -297,6 +321,9 @@ const ExpensesPage = () => {
                     <th scope="col" className="px-5 py-3 text-right font-semibold">
                       Amount
                     </th>
+                    <th scope="col" className="px-5 py-3 text-right font-semibold">
+                      Actions
+                    </th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-cream-200">
@@ -332,6 +359,15 @@ const ExpensesPage = () => {
                       <td className="whitespace-nowrap px-5 py-3.5 text-right font-semibold text-ink-900">
                         {formatINR2(expense.amount)}
                       </td>
+                      <td className="whitespace-nowrap px-5 py-3.5 text-right">
+                        <button
+                          type="button"
+                          className="rounded-md border border-red-200 px-2.5 py-1.5 text-xs font-semibold text-red-700 transition-colors hover:bg-red-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400/40"
+                          onClick={() => setCancelTarget(expense)}
+                        >
+                          Cancel
+                        </button>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -339,7 +375,7 @@ const ExpensesPage = () => {
             </div>
             <p className="border-t border-cream-200 px-5 py-3 text-[11px] text-ink-400">
               Showing up to 200 expenses. Summary figures cover every expense matching the current
-              filters.
+              filters. Cancelled expenses stay in the audit trail.
             </p>
           </>
         )}
@@ -351,6 +387,17 @@ const ExpensesPage = () => {
           onCategoryAdded={handleCategoryAdded}
           onClose={() => setIsFormOpen(false)}
           onSaved={handleSaved}
+        />
+      ) : null}
+
+      {cancelTarget ? (
+        <CancelTransactionDialog
+          title={`Cancel expense ${cancelTarget.expenseNumber}?`}
+          description={`${formatINR2(cancelTarget.amount)} will be removed from the cash and bank books, and this expense will be marked CANCELLED in the audit trail. This cannot be undone.`}
+          confirmText="Cancel expense"
+          isSaving={isCancelling}
+          onConfirm={handleCancelExpense}
+          onClose={() => setCancelTarget(null)}
         />
       ) : null}
     </div>

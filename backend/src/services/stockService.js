@@ -348,3 +348,33 @@ export const releaseStockReservation = async (reservation) => {
   );
   await StockTransaction.deleteOne({ _id: reservation.transaction._id });
 };
+
+export const restoreCancelledSaleStock = async ({
+  product,
+  quantity,
+  referenceId,
+  notes = '',
+}) =>
+  applySignedMovement({
+    product,
+    type: 'adjustment',
+    delta: roundQuantity(quantity),
+    referenceId,
+    referenceType: 'sale',
+    notes,
+  });
+
+export const reverseCancelledProductionStock = async ({
+  product,
+  quantity,
+  referenceId,
+  notes = '',
+}) =>
+  applySignedMovement({
+    product,
+    type: 'adjustment',
+    delta: -roundQuantity(quantity),
+    referenceId,
+    referenceType: 'production',
+    notes,
+  });

@@ -1,5 +1,6 @@
 import { Router } from 'express';
 
+import { cancelExpenseHandler } from '../controllers/cancellationController.js';
 import {
   addExpense,
   addExpenseCategory,
@@ -16,5 +17,6 @@ router.get('/categories', getExpenseCategories);
 router.post('/categories', addExpenseCategory);
 router.get('/', getExpenses);
 router.post('/', addExpense);
+router.post('/:id/cancel', cancelExpenseHandler);
 
 export default router;

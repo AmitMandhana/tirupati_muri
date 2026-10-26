@@ -1,5 +1,7 @@
 import mongoose from 'mongoose';
 
+import { cancelledPlugin } from './plugins/cancelled.js';
+
 export const BANK_TRANSACTION_TYPES = [
   'deposit',
   'withdrawal',
@@ -94,5 +96,6 @@ const bankTransactionSchema = new mongoose.Schema(
 bankTransactionSchema.index({ bankAccount: 1, transactionDate: -1, createdAt: -1 });
 bankTransactionSchema.index({ transactionDate: -1 });
 bankTransactionSchema.index({ transferId: 1 });
+bankTransactionSchema.plugin(cancelledPlugin);
 
 export const BankTransaction = mongoose.model('BankTransaction', bankTransactionSchema);

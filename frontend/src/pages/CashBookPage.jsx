@@ -18,28 +18,52 @@ import {
   toDateInputValue,
 } from '../utils/format';
 
-const SummaryRow = ({ label, hint, value, negative = false, emphasis = false }) => (
-  <div
-    className={`flex items-baseline justify-between gap-4 px-5 py-3 ${
-      emphasis ? 'bg-cream-50/70' : ''
-    }`}
-  >
-    <div>
-      <p className={`text-sm ${emphasis ? 'font-semibold text-ink-900' : 'text-ink-700'}`}>
-        {label}
-      </p>
-      {hint ? <p className="mt-0.5 text-xs text-ink-400">{hint}</p> : null}
-    </div>
-    <p
-      className={`whitespace-nowrap text-right ${
-        emphasis ? 'text-base font-semibold text-ink-900' : 'text-sm font-medium text-ink-900'
+const SummaryRow = ({
+  label,
+  hint,
+  value,
+  negative = false,
+  signed = false,
+  emphasis = false,
+  valueClass = '',
+}) => {
+  const amount = Number(value);
+  const isNumber = value !== null && value !== undefined && Number.isFinite(amount);
+
+  let prefix = '';
+
+  if (isNumber) {
+    if (amount < -0.004) {
+      prefix = '− ';
+    } else if (negative && Math.abs(amount) > 0.004) {
+      prefix = '− ';
+    } else if (signed && amount > 0.004) {
+      prefix = '+ ';
+    }
+  }
+
+  return (
+    <div
+      className={`flex items-baseline justify-between gap-4 px-5 py-3 ${
+        emphasis ? 'bg-cream-50/70' : ''
       }`}
     >
-      {negative ? '− ' : ''}
-      {formatINR2(Math.abs(Number(value) || 0))}
-    </p>
-  </div>
-);
+      <div>
+        <p className={`text-sm ${emphasis ? 'font-semibold text-ink-900' : 'text-ink-700'}`}>
+          {label}
+        </p>
+        {hint ? <p className="mt-0.5 text-xs text-ink-400">{hint}</p> : null}
+      </div>
+      <p
+        className={`whitespace-nowrap text-right ${
+          emphasis ? 'text-base font-semibold' : 'text-sm font-medium'
+        } ${valueClass || 'text-ink-900'}`}
+      >
+        {isNumber ? `${prefix}${formatINR2(Math.abs(amount))}` : '—'}
+      </p>
+    </div>
+  );
+};
 
 const differenceClass = (value) => {
   const amount = Number(value) || 0;
@@ -127,13 +151,28 @@ const CashBookPage = () => {
     closingCash: 0,
   };
 
-  const latestCount = cashBook?.latestCount ?? null;
+  const closing = cashBook?.closing ?? {
+    openingCash: 0,
+    cashSales: 0,
+    cashCollections: 0,
+    cashExpenses: 0,
+    staffPayments: 0,
+    otherCashTransactions: 0,
+    expectedClosingCash: 0,
+    physicalCash: null,
+    difference: null,
+    notes: '',
+    reason: '',
+    adjusted: false,
+    countedAt: null,
+    isCounted: false,
+  };
 
   return (
     <div>
       <PageHeader
         title="Daily Cash Book"
-        description="Opening cash plus cash sales, party collections and other cash income, less cash expenses, staff payments, loan payments and other cash outflows. Credit sales never affect cash in hand."
+        description="Daily closing with opening cash, cash sales, cash collections, cash expenses, staff payments and other cash transactions, compared with the physical cash counted. Credit sales never affect cash in hand."
         actions={
           <>
             <button
@@ -150,7 +189,7 @@ const CashBookPage = () => {
               onClick={() => setIsCountOpen(true)}
               disabled={isLoading || !cashBook || cashBook.beforeOpening}
             >
-              Physical count
+              Daily closing
             </button>
           </>
         }
@@ -269,10 +308,10 @@ const CashBookPage = () => {
           <div className="mt-4 grid gap-4 lg:grid-cols-3">
             <section className="card overflow-hidden lg:col-span-2">
               <div className="border-b border-cream-200 px-5 py-4">
-                <h2 className="text-base font-semibold text-ink-900">Daily cash view</h2>
+                <h2 className="text-base font-semibold text-ink-900">Daily closing</h2>
                 <p className="mt-1 text-xs text-ink-400">
-                  Opening + cash sales + collections + other income − expenses − staff − loans −
-                  other outflows = closing.
+                  Opening cash + cash sales + cash collections + other cash transactions − cash
+                  expenses − staff payments = expected closing cash.
                 </p>
               </div>
               {cashBook.beforeOpening ? (
@@ -280,129 +319,91 @@ const CashBookPage = () => {
                   No cash book for this date. Opening cash starts later.
                 </p>
               ) : (
-                <div className="divide-y divide-cream-200">
-                  <SummaryRow label="Opening cash" value={summary.openingCash} emphasis />
-                  <SummaryRow
-                    label="Cash sales"
-                    hint="Retail and wholesale cash receipts"
-                    value={summary.cashSales}
-                  />
-                  <SummaryRow
-                    label="Party collections"
-                    hint="Cash received from parties"
-                    value={summary.partyCollections}
-                  />
-                  <SummaryRow
-                    label="Other income"
-                    hint="Cash count surplus adjustments"
-                    value={summary.otherIncome}
-                  />
-                  <SummaryRow
-                    label="Expenses"
-                    hint="Cash operating expenses"
-                    value={summary.expenses}
-                    negative
-                  />
-                  <SummaryRow
-                    label="Staff payments"
-                    hint="Salary category paid in cash"
-                    value={summary.staffPayments}
-                    negative
-                  />
-                  <SummaryRow
-                    label="Loan payments"
-                    hint="Loan interest paid in cash"
-                    value={summary.loanPayments}
-                    negative
-                  />
-                  <SummaryRow
-                    label="Other cash outflows"
-                    hint="Cash count shortage adjustments"
-                    value={summary.otherOutflows}
-                    negative
-                  />
-                  <SummaryRow label="Closing cash" value={summary.closingCash} emphasis />
-                </div>
+                <>
+                  <div className="divide-y divide-cream-200">
+                    <SummaryRow label="Opening cash" value={closing.openingCash} emphasis />
+                    <SummaryRow
+                      label="Cash sales"
+                      hint="Retail and wholesale cash receipts"
+                      value={closing.cashSales}
+                    />
+                    <SummaryRow
+                      label="Cash collections"
+                      hint="Payments received from parties"
+                      value={closing.cashCollections}
+                    />
+                    <SummaryRow
+                      label="Cash expenses"
+                      hint="Operating expenses and loan interest paid in cash"
+                      value={closing.cashExpenses}
+                      negative
+                    />
+                    <SummaryRow
+                      label="Staff payments"
+                      hint="Salary, advances and staff payments paid in cash"
+                      value={closing.staffPayments}
+                      negative
+                    />
+                    <SummaryRow
+                      label="Other cash transactions"
+                      hint="Cash-count surplus or shortage adjustments, net"
+                      value={closing.otherCashTransactions}
+                      signed
+                    />
+                    <SummaryRow
+                      label="Expected closing cash"
+                      value={closing.expectedClosingCash}
+                      emphasis
+                    />
+                    <SummaryRow
+                      label="Physical cash"
+                      hint={closing.isCounted ? undefined : 'Not counted yet for this date'}
+                      value={closing.physicalCash}
+                    />
+                    <SummaryRow
+                      label="Difference"
+                      hint="Physical cash minus expected closing cash"
+                      value={closing.difference}
+                      signed
+                      emphasis
+                      valueClass={
+                        closing.isCounted ? differenceClass(closing.difference) : 'text-ink-400'
+                      }
+                    />
+                  </div>
+                  <div className="border-t border-cream-200 px-5 py-4">
+                    {closing.notes ? (
+                      <p className="text-sm text-ink-600">
+                        <span className="font-semibold text-ink-800">Closing notes:</span>{' '}
+                        {closing.notes}
+                      </p>
+                    ) : (
+                      <p className="text-xs text-ink-400">
+                        {closing.isCounted
+                          ? 'No closing notes recorded.'
+                          : 'Count the cash drawer and record closing notes to finish the day.'}
+                      </p>
+                    )}
+                    {closing.isCounted ? (
+                      <p className="mt-2 text-[11px] text-ink-400">
+                        Counted {formatReceiptDate(closing.countedAt)} at{' '}
+                        {formatReceiptTime(closing.countedAt)}
+                        {closing.adjusted ? ' · cash book adjusted' : ' · not adjusted'}
+                      </p>
+                    ) : null}
+                    <button
+                      type="button"
+                      className="btn-secondary mt-3 w-full sm:w-auto"
+                      onClick={() => setIsCountOpen(true)}
+                    >
+                      {closing.isCounted ? 'Update closing' : 'Record daily closing'}
+                    </button>
+                  </div>
+                </>
               )}
             </section>
 
             <div className="space-y-4">
-              <section className="card overflow-hidden">
-                <div className="flex items-center justify-between gap-3 border-b border-cream-200 px-5 py-4">
-                  <h2 className="text-base font-semibold text-ink-900">Physical cash</h2>
-                  {latestCount ? (
-                    <span
-                      className={`pill ${
-                        latestCount.adjusted
-                          ? 'bg-brand-50 text-brand-700'
-                          : 'bg-cream-100 text-ink-500'
-                      }`}
-                    >
-                      {latestCount.adjusted ? 'Adjusted' : 'Not adjusted'}
-                    </span>
-                  ) : null}
-                </div>
-
-                {latestCount ? (
-                  <div className="space-y-3 px-5 py-4">
-                    <div className="flex items-baseline justify-between gap-3">
-                      <span className="text-xs text-ink-500">Expected cash</span>
-                      <span className="text-sm font-semibold text-ink-900">
-                        {formatINR2(latestCount.expectedCash)}
-                      </span>
-                    </div>
-                    <div className="flex items-baseline justify-between gap-3">
-                      <span className="text-xs text-ink-500">Physical cash</span>
-                      <span className="text-sm font-semibold text-ink-900">
-                        {formatINR2(latestCount.physicalCash)}
-                      </span>
-                    </div>
-                    <div className="flex items-baseline justify-between gap-3 rounded-lg bg-cream-50 px-3 py-2">
-                      <span className="text-xs text-ink-500">Difference</span>
-                      <span
-                        className={`text-base font-semibold ${differenceClass(latestCount.difference)}`}
-                      >
-                        {formatINR2(latestCount.difference)}
-                      </span>
-                    </div>
-                    {latestCount.reason ? (
-                      <p className="text-xs text-ink-500">
-                        <span className="font-semibold text-ink-700">Reason:</span>{' '}
-                        {latestCount.reason}
-                      </p>
-                    ) : null}
-                    {latestCount.notes ? (
-                      <p className="text-xs text-ink-400">{latestCount.notes}</p>
-                    ) : null}
-                    <p className="text-[11px] text-ink-400">
-                      Counted {formatReceiptDate(latestCount.countedAt)} at{' '}
-                      {formatReceiptTime(latestCount.countedAt)}
-                    </p>
-                    <button
-                      type="button"
-                      className="btn-secondary w-full"
-                      onClick={() => setIsCountOpen(true)}
-                    >
-                      Count again
-                    </button>
-                  </div>
-                ) : (
-                  <div className="px-5 py-6">
-                    <p className="text-sm text-ink-500">
-                      Compare the expected closing cash with the cash actually counted.
-                    </p>
-                    <button
-                      type="button"
-                      className="btn-primary mt-4 w-full"
-                      onClick={() => setIsCountOpen(true)}
-                      disabled={cashBook.beforeOpening}
-                    >
-                      Record physical count
-                    </button>
-                  </div>
-                )}
-              </section>
-
               <section className="card border-brand-100 bg-brand-50/50 p-5">
                 <span className="pill border border-brand-200 bg-white uppercase tracking-[0.12em] text-brand-700">
                   Cash only
@@ -421,6 +422,41 @@ const CashBookPage = () => {
                   View receivables
                   <NavIcon name="arrowRight" className="h-4 w-4" />
                 </Link>
+              </section>
+
+              <section className="card p-5">
+                <h2 className="text-base font-semibold text-ink-900">Closing checklist</h2>
+                <ul className="mt-3 space-y-2 text-sm text-ink-500">
+                  <li className="flex items-start gap-2">
+                    <NavIcon
+                      name="check"
+                      className={`mt-0.5 h-4 w-4 shrink-0 ${
+                        closing.isCounted ? 'text-emerald-600' : 'text-ink-300'
+                      }`}
+                    />
+                    Physical cash counted
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <NavIcon
+                      name="check"
+                      className={`mt-0.5 h-4 w-4 shrink-0 ${
+                        closing.isCounted && Math.abs(Number(closing.difference)) < 0.005
+                          ? 'text-emerald-600'
+                          : 'text-ink-300'
+                      }`}
+                    />
+                    Difference explained or adjusted
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <NavIcon
+                      name="check"
+                      className={`mt-0.5 h-4 w-4 shrink-0 ${
+                        closing.notes ? 'text-emerald-600' : 'text-ink-300'
+                      }`}
+                    />
+                    Closing notes added
+                  </li>
+                </ul>
               </section>
             </div>
           </div>

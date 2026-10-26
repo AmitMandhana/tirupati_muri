@@ -8,6 +8,7 @@ import { useBusinessSettings } from '../hooks/useBusinessSettings';
 import { downloadInvoicePdf } from '../utils/invoicePdf';
 import { formatINR2 } from '../utils/format';
 import { getInvoiceStatusMeta } from '../utils/invoice';
+import { buildInvoiceMessage, buildWhatsAppUrl } from '../utils/whatsapp';
 
 const WholesaleInvoiceDialog = ({ invoice, mode = 'completed', onClose, onNewInvoice }) => {
   const { settings } = useBusinessSettings();
@@ -41,6 +42,28 @@ const WholesaleInvoiceDialog = ({ invoice, mode = 'completed', onClose, onNewInv
     } catch {
       toast.error('Unable to generate the invoice PDF.');
     }
+  };
+
+  const whatsappUrl = buildWhatsAppUrl({
+    phone: invoice.partyPhone,
+    message: buildInvoiceMessage({
+      partyName: invoice.partyName,
+      invoiceNumber: invoice.invoiceNumber,
+      invoiceDate: invoice.createdAt,
+      total: invoice.total,
+      paid: invoice.paid,
+      outstanding: invoice.due,
+      businessName: settings.businessName,
+    }),
+  });
+
+  const handleWhatsApp = () => {
+    if (!whatsappUrl) {
+      toast.error('Add a phone number for this party to share the invoice.');
+      return;
+    }
+
+    window.open(whatsappUrl, '_blank', 'noopener,noreferrer');
   };
 
   return createPortal(
@@ -89,12 +112,25 @@ const WholesaleInvoiceDialog = ({ invoice, mode = 'completed', onClose, onNewInv
         </div>
 
         <div className="invoice-chrome border-t border-cream-200 bg-cream-50/70 px-5 py-4">
-          <div className="grid gap-2 sm:grid-cols-3">
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
             <button type="button" className="btn-primary" onClick={() => window.print()}>
               Print invoice
             </button>
             <button type="button" className="btn-secondary" onClick={handleDownload}>
               Download PDF
+            </button>
+            <button
+              type="button"
+              className="btn-secondary"
+              onClick={handleWhatsApp}
+              disabled={!whatsappUrl}
+              title={
+                whatsappUrl
+                  ? `Share invoice ${invoice.invoiceNumber} on WhatsApp`
+                  : 'This party has no phone number'
+              }
+            >
+              Share on WhatsApp
             </button>
             {onNewInvoice ? (
               <button type="button" className="btn-secondary" onClick={onNewInvoice}>
@@ -107,7 +143,8 @@ const WholesaleInvoiceDialog = ({ invoice, mode = 'completed', onClose, onNewInv
             )}
           </div>
           <p className="mt-3 text-center text-[11px] text-ink-400">
-            A4 invoice · Print or download for the party.
+            A4 invoice · Print, download or send the total, paid and outstanding amount on
+            WhatsApp.
           </p>
         </div>
       </div>

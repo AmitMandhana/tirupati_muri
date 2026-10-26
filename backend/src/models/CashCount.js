@@ -2,6 +2,12 @@ import mongoose from 'mongoose';
 
 const cashCountSchema = new mongoose.Schema(
   {
+    closingNumber: {
+      type: String,
+      required: [true, 'Closing number is required.'],
+      unique: true,
+      trim: true,
+    },
     countDate: {
       type: Date,
       required: [true, 'Count date is required.'],

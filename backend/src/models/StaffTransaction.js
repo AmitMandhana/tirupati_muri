@@ -1,5 +1,7 @@
 import mongoose from 'mongoose';
 
+import { cancelledPlugin } from './plugins/cancelled.js';
+
 export const STAFF_TRANSACTION_TYPES = [
   'salary',
   'advance',
@@ -88,5 +90,6 @@ staffTransactionSchema.index(
   { staff: 1, salaryMonth: 1 },
   { unique: true, partialFilterExpression: { type: 'salary' } },
 );
+staffTransactionSchema.plugin(cancelledPlugin);
 
 export const StaffTransaction = mongoose.model('StaffTransaction', staffTransactionSchema);

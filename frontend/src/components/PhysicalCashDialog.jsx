@@ -12,11 +12,18 @@ import { fieldInputClass } from '../utils/formStyles';
 const roundMoney = (value) => Math.round((value + Number.EPSILON) * 100) / 100;
 
 const PhysicalCashDialog = ({ cashBook, onClose, onSaved }) => {
-  const expectedCash = roundMoney(Number(cashBook?.summary?.closingCash) || 0);
-  const [physicalCash, setPhysicalCash] = useState('');
+  const latestCount = cashBook?.latestCount ?? null;
+  const expectedCash = roundMoney(
+    Number(cashBook?.closing?.expectedClosingCash ?? cashBook?.summary?.closingCash) || 0,
+  );
+  const [physicalCash, setPhysicalCash] = useState(
+    latestCount?.physicalCash !== null && latestCount?.physicalCash !== undefined
+      ? String(latestCount.physicalCash)
+      : '',
+  );
   const [adjustCashBook, setAdjustCashBook] = useState(true);
-  const [reason, setReason] = useState('');
-  const [notes, setNotes] = useState('');
+  const [reason, setReason] = useState(latestCount?.reason ?? '');
+  const [notes, setNotes] = useState(latestCount?.notes ?? '');
   const [errors, setErrors] = useState({});
   const [isSaving, setIsSaving] = useState(false);
 
@@ -93,12 +100,12 @@ const PhysicalCashDialog = ({ cashBook, onClose, onSaved }) => {
 
       toast.success(
         data.count.adjusted
-          ? `Physical cash recorded and cash book adjusted by ${formatINR2(data.count.difference)}.`
-          : 'Physical cash recorded.',
+          ? `Daily closing saved and cash book adjusted by ${formatINR2(data.count.difference)}.`
+          : 'Daily closing saved.',
       );
       onSaved(data.cashBook, data.count);
     } catch (error) {
-      toast.error(getApiErrorMessage(error, 'Unable to record the physical cash.'));
+      toast.error(getApiErrorMessage(error, 'Unable to save the daily closing.'));
     } finally {
       setIsSaving(false);
     }
@@ -115,10 +122,10 @@ const PhysicalCashDialog = ({ cashBook, onClose, onSaved }) => {
         <div className="flex items-start justify-between gap-4 border-b border-cream-200 px-6 py-4">
           <div>
             <h2 id="physical-dialog-title" className="text-lg font-semibold text-ink-900">
-              Physical cash count
+              Daily closing
             </h2>
             <p className="mt-0.5 text-xs text-ink-500">
-              Count the cash drawer for {formatDateKeyLong(cashBook.date)}.
+              Count the cash drawer and add closing notes for {formatDateKeyLong(cashBook.date)}.
             </p>
           </div>
           <button
@@ -135,7 +142,7 @@ const PhysicalCashDialog = ({ cashBook, onClose, onSaved }) => {
           <div className="space-y-4 px-6 py-5">
             <div className="rounded-lg border border-cream-200 bg-cream-50/70 px-4 py-3">
               <div className="flex items-baseline justify-between gap-3">
-                <span className="text-xs text-ink-500">Expected cash</span>
+                <span className="text-xs text-ink-500">Expected closing cash</span>
                 <span className="text-base font-semibold text-ink-900">
                   {formatINR2(expectedCash)}
                 </span>
@@ -189,7 +196,7 @@ const PhysicalCashDialog = ({ cashBook, onClose, onSaved }) => {
                   Adjust cash book to match
                 </span>
                 <span className="mt-0.5 block text-xs text-ink-400">
-                  A surplus becomes other cash income; a shortage becomes another cash outflow.
+                  A difference is recorded as an Other cash transaction (surplus or shortage).
                 </span>
               </span>
             </label>
@@ -220,7 +227,7 @@ const PhysicalCashDialog = ({ cashBook, onClose, onSaved }) => {
             </FormField>
 
             <FormField
-              label="Notes"
+              label="Closing notes"
               htmlFor="physical-notes"
               error={errors.notes}
               hint="Optional. Up to 500 characters."
@@ -250,7 +257,7 @@ const PhysicalCashDialog = ({ cashBook, onClose, onSaved }) => {
                   <Spinner /> Saving...
                 </>
               ) : (
-                'Record count'
+                'Save closing'
               )}
             </button>
           </div>

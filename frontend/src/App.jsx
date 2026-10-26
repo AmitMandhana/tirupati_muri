@@ -1,29 +1,40 @@
+import { lazy, Suspense } from 'react';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 
 import ProtectedRoute from './components/ProtectedRoute';
+import Spinner from './components/Spinner';
 import { AuthProvider } from './hooks/useAuth';
 import { BusinessSettingsProvider } from './hooks/useBusinessSettings';
 import AppLayout from './layouts/AppLayout';
-import BankAccountDetailPage from './pages/BankAccountDetailPage';
-import BankAccountsPage from './pages/BankAccountsPage';
-import CashBookPage from './pages/CashBookPage';
-import DashboardPage from './pages/DashboardPage';
-import ExpensesPage from './pages/ExpensesPage';
-import LoansPage from './pages/LoansPage';
-import LoginPage from './pages/LoginPage';
-import PartiesPage from './pages/PartiesPage';
-import PartyDetailPage from './pages/PartyDetailPage';
-import ProductionPage from './pages/ProductionPage';
-import ProductsPage from './pages/ProductsPage';
-import ReceivablesPage from './pages/ReceivablesPage';
-import ReportsPage from './pages/ReportsPage';
-import RetailBillingPage from './pages/RetailBillingPage';
-import SettingsPage from './pages/SettingsPage';
-import StaffDetailPage from './pages/StaffDetailPage';
-import StaffPage from './pages/StaffPage';
-import StockPage from './pages/StockPage';
-import WholesalePage from './pages/WholesalePage';
+
+const BankAccountDetailPage = lazy(() => import('./pages/BankAccountDetailPage'));
+const BankAccountsPage = lazy(() => import('./pages/BankAccountsPage'));
+const CashBookPage = lazy(() => import('./pages/CashBookPage'));
+const DashboardPage = lazy(() => import('./pages/DashboardPage'));
+const ExpensesPage = lazy(() => import('./pages/ExpensesPage'));
+const AuditTrailPage = lazy(() => import('./pages/AuditTrailPage'));
+const LoansPage = lazy(() => import('./pages/LoansPage'));
+const LoginPage = lazy(() => import('./pages/LoginPage'));
+const PartiesPage = lazy(() => import('./pages/PartiesPage'));
+const PartyDetailPage = lazy(() => import('./pages/PartyDetailPage'));
+const ProductionPage = lazy(() => import('./pages/ProductionPage'));
+const ProductsPage = lazy(() => import('./pages/ProductsPage'));
+const ReceivablesPage = lazy(() => import('./pages/ReceivablesPage'));
+const ReportsPage = lazy(() => import('./pages/ReportsPage'));
+const RetailBillingPage = lazy(() => import('./pages/RetailBillingPage'));
+const SettingsPage = lazy(() => import('./pages/SettingsPage'));
+const StaffDetailPage = lazy(() => import('./pages/StaffDetailPage'));
+const StaffPage = lazy(() => import('./pages/StaffPage'));
+const StockPage = lazy(() => import('./pages/StockPage'));
+const WholesalePage = lazy(() => import('./pages/WholesalePage'));
+
+const RouteFallback = () => (
+  <div className="flex min-h-[50vh] items-center justify-center gap-3 text-sm text-ink-500">
+    <Spinner className="h-4 w-4 text-brand-600" />
+    Loading...
+  </div>
+);
 
 function App() {
   return (
@@ -49,41 +60,44 @@ function App() {
           }}
         />
 
-        <Routes>
-          <Route path="/login" element={<LoginPage />} />
+        <Suspense fallback={<RouteFallback />}>
+          <Routes>
+            <Route path="/login" element={<LoginPage />} />
 
-          <Route
-            path="/"
-            element={
-              <ProtectedRoute>
-                <BusinessSettingsProvider>
-                  <AppLayout />
-                </BusinessSettingsProvider>
-              </ProtectedRoute>
-            }
-          >
-            <Route index element={<DashboardPage />} />
-            <Route path="retail-billing" element={<RetailBillingPage />} />
-            <Route path="wholesale" element={<WholesalePage />} />
-            <Route path="parties" element={<PartiesPage />} />
-            <Route path="parties/:id" element={<PartyDetailPage />} />
-            <Route path="receivables" element={<ReceivablesPage />} />
-            <Route path="stock" element={<StockPage />} />
-            <Route path="production" element={<ProductionPage />} />
-            <Route path="staff" element={<StaffPage />} />
-            <Route path="staff/:id" element={<StaffDetailPage />} />
-            <Route path="expenses" element={<ExpensesPage />} />
-            <Route path="cash-book" element={<CashBookPage />} />
-            <Route path="bank-accounts" element={<BankAccountsPage />} />
-            <Route path="bank-accounts/:id" element={<BankAccountDetailPage />} />
-            <Route path="loans" element={<LoansPage />} />
-            <Route path="reports" element={<ReportsPage />} />
-            <Route path="products" element={<ProductsPage />} />
-            <Route path="settings" element={<SettingsPage />} />
-          </Route>
+            <Route
+              path="/"
+              element={
+                <ProtectedRoute>
+                  <BusinessSettingsProvider>
+                    <AppLayout />
+                  </BusinessSettingsProvider>
+                </ProtectedRoute>
+              }
+            >
+              <Route index element={<DashboardPage />} />
+              <Route path="retail-billing" element={<RetailBillingPage />} />
+              <Route path="wholesale" element={<WholesalePage />} />
+              <Route path="parties" element={<PartiesPage />} />
+              <Route path="parties/:id" element={<PartyDetailPage />} />
+              <Route path="receivables" element={<ReceivablesPage />} />
+              <Route path="stock" element={<StockPage />} />
+              <Route path="production" element={<ProductionPage />} />
+              <Route path="staff" element={<StaffPage />} />
+              <Route path="staff/:id" element={<StaffDetailPage />} />
+              <Route path="expenses" element={<ExpensesPage />} />
+              <Route path="cash-book" element={<CashBookPage />} />
+              <Route path="bank-accounts" element={<BankAccountsPage />} />
+              <Route path="bank-accounts/:id" element={<BankAccountDetailPage />} />
+              <Route path="loans" element={<LoansPage />} />
+              <Route path="reports" element={<ReportsPage />} />
+              <Route path="audit-trail" element={<AuditTrailPage />} />
+              <Route path="products" element={<ProductsPage />} />
+              <Route path="settings" element={<SettingsPage />} />
+            </Route>
 
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        </Suspense>
       </BrowserRouter>
     </AuthProvider>
   );

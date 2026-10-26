@@ -1,5 +1,7 @@
 import mongoose from 'mongoose';
 
+import { cancelledPlugin } from './plugins/cancelled.js';
+
 export const PARTY_PAYMENT_METHODS = ['cash', 'upi', 'bank'];
 export const PARTY_PAYMENT_ACCOUNTS = ['cash', 'bank'];
 
@@ -66,5 +68,6 @@ const partyPaymentSchema = new mongoose.Schema(
 
 partyPaymentSchema.index({ party: 1, paymentDate: 1, _id: 1 });
 partyPaymentSchema.index({ paymentDate: -1 });
+partyPaymentSchema.plugin(cancelledPlugin);
 
 export const PartyPayment = mongoose.model('PartyPayment', partyPaymentSchema);

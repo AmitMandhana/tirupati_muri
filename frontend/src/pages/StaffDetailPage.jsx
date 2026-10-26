@@ -1,14 +1,19 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
+import toast from 'react-hot-toast';
 
+import CancelTransactionDialog from '../components/CancelTransactionDialog';
 import PageHeader from '../components/PageHeader';
 import Spinner from '../components/Spinner';
 import StatCard from '../components/StatCard';
 import StaffFormDialog from '../components/StaffFormDialog';
 import StaffTransactionDialog from '../components/StaffTransactionDialog';
+import { useBusinessSettings } from '../hooks/useBusinessSettings';
+import { cancelStaffTransactionApi } from '../services/cancelService';
 import { getStaffMemberApi } from '../services/staffService';
 import { getApiErrorMessage } from '../utils/errors';
 import { formatINR2, formatReceiptDate } from '../utils/format';
+import { downloadLedgerPdf } from '../utils/ledgerPdf';
 
 const MONTH_NAMES = [
   'January',
@@ -37,6 +42,7 @@ const formatSalaryMonth = (value) => {
 
 const StaffDetailPage = () => {
   const { id: staffId } = useParams();
+  const { settings } = useBusinessSettings();
   const [detail, setDetail] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
@@ -44,6 +50,8 @@ const StaffDetailPage = () => {
   const [isEntryOpen, setIsEntryOpen] = useState(false);
   const [entryType, setEntryType] = useState('payment');
   const [isEditOpen, setIsEditOpen] = useState(false);
+  const [cancelTarget, setCancelTarget] = useState(null);
+  const [isCancelling, setIsCancelling] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
@@ -82,6 +90,25 @@ const StaffDetailPage = () => {
   const openEntry = (type = 'payment') => {
     setEntryType(type);
     setIsEntryOpen(true);
+  };
+
+  const handleCancelEntry = async (reason) => {
+    if (!cancelTarget) {
+      return;
+    }
+
+    setIsCancelling(true);
+
+    try {
+      const data = await cancelStaffTransactionApi(staffId, cancelTarget.id, reason);
+      toast.success(data.message ?? 'Staff entry cancelled.');
+      setCancelTarget(null);
+      refresh();
+    } catch (error) {
+      toast.error(getApiErrorMessage(error, 'Unable to cancel the staff entry.'));
+    } finally {
+      setIsCancelling(false);
+    }
   };
 
   const backLink = (
@@ -149,6 +176,35 @@ const StaffDetailPage = () => {
       ? `${formatINR2(summary.salary)} salary + ${formatINR2(summary.bonus)} bonus`
       : 'Monthly salary charged';
 
+  const handleDownloadLedger = async () => {
+    try {
+      await downloadLedgerPdf({
+        title: 'Staff Ledger',
+        entityName: staff.name,
+        entityMeta: [staff.role, staff.phone],
+        summary: [
+          { label: 'Salary payable', value: summary.salaryPayable },
+          { label: 'Advance paid', value: summary.advancePaid },
+          { label: 'Payments made', value: summary.paymentsMade },
+          { label: 'Remaining payable', value: summary.remainingPayable },
+        ],
+        rows: ledger.map((entry) => ({
+          date: entry.date,
+          reference: entry.reference,
+          description: `${entry.typeLabel}${entry.salaryMonth ? ` (${formatSalaryMonth(entry.salaryMonth)})` : ''} · ${entry.description}`,
+          debit: entry.debit,
+          credit: entry.credit,
+          balance: entry.balance,
+        })),
+        settings,
+        filename: `staff-ledger-${staff.name.replace(/[^\w-]+/g, '-')}.pdf`,
+      });
+      toast.success('Staff ledger PDF downloaded.');
+    } catch {
+      toast.error('Unable to generate the staff ledger PDF.');
+    }
+  };
+
   return (
     <div>
       {backLink}
@@ -165,6 +221,15 @@ const StaffDetailPage = () => {
                 onClick={() => setIsEditOpen(true)}
               >
                 Edit staff
+              </button>
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={handleDownloadLedger}
+                disabled={ledger.length === 0}
+                title={ledger.length === 0 ? 'There are no ledger entries yet.' : undefined}
+              >
+                Ledger PDF
               </button>
               <button
                 type="button"
@@ -342,6 +407,9 @@ const StaffDetailPage = () => {
                       <th scope="col" className="px-5 py-3 text-right font-semibold">
                         Balance
                       </th>
+                      <th scope="col" className="px-5 py-3 text-right font-semibold">
+                        Actions
+                      </th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-cream-200">
@@ -377,13 +445,22 @@ const StaffDetailPage = () => {
                         >
                           {formatINR2(entry.balance)}
                         </td>
+                        <td className="whitespace-nowrap px-5 py-3.5 text-right">
+                          <button
+                            type="button"
+                            className="rounded-md border border-red-200 px-2.5 py-1.5 text-xs font-semibold text-red-700 transition-colors hover:bg-red-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400/40"
+                            onClick={() => setCancelTarget(entry)}
+                          >
+                            Cancel
+                          </button>
+                        </td>
                       </tr>
                     ))}
                   </tbody>
                   <tfoot>
                     <tr className="border-t border-cream-300 bg-cream-50/70">
                       <td
-                        colSpan={4}
+                        colSpan={5}
                         className="px-5 py-3 text-right text-sm font-semibold text-ink-700"
                       >
                         Remaining payable
@@ -499,6 +576,17 @@ const StaffDetailPage = () => {
             setIsEditOpen(false);
             refresh();
           }}
+        />
+      ) : null}
+
+      {cancelTarget ? (
+        <CancelTransactionDialog
+          title={`Cancel entry ${cancelTarget.reference}?`}
+          description={`${formatINR2(cancelTarget.debit > 0 ? cancelTarget.debit : cancelTarget.credit)} (${cancelTarget.typeLabel}) will be reversed from the salary ledger and any linked bank payment will be cancelled. The entry stays visible as CANCELLED in the audit trail. This cannot be undone.`}
+          confirmText="Cancel entry"
+          isSaving={isCancelling}
+          onConfirm={handleCancelEntry}
+          onClose={() => setCancelTarget(null)}
         />
       ) : null}
     </div>

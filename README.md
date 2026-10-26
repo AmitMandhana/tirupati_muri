@@ -9,13 +9,20 @@ book with cash in hand, physical cash counts and adjustments, multi-account bank
 with transaction ledgers and account-to-account transfers, and Muri production entries with
 yield and per-KG ratio calculation, finished-stock integration and printable production
 history, staff accounts with salary payroll ledgers, a real-data business dashboard with
-range filters and a report centre with twelve printable/exportable reports. The loan module is
-still represented by a clearly marked "Coming Soon" page and will be added in a later phase.
+range filters and a report centre with twelve printable/exportable reports. Every important
+document (thermal receipt, wholesale invoice, party ledger, staff ledger, bank ledger, production
+report, loan report and every report) can be printed or downloaded as a PDF, and invoices,
+ledgers and payment reminders can be shared through WhatsApp click-to-chat. Cancelled
+transactions are never deleted: they are marked CANCELLED and kept in an audit trail, and daily
+closing compares expected and physical cash with notes. The loan module is still represented by a
+clearly marked "Coming Soon" page and will be added in a later phase. The application is
+production-ready for deployment on Vercel (frontend), Render or Railway (backend) and MongoDB
+Atlas (database).
 
 ## Tech stack
 
-**Frontend:** React 19, Vite, Tailwind CSS 4, React Router, Axios, react-hot-toast
-**Backend:** Node.js, Express 5, MongoDB, Mongoose, JWT, bcrypt
+**Frontend:** React 19, Vite, Tailwind CSS 4, React Router, Axios, react-hot-toast, jsPDF
+**Backend:** Node.js, Express 5, MongoDB, Mongoose, JWT, bcrypt, helmet, express-rate-limit
 
 Both parts use plain JavaScript (no TypeScript).
 
@@ -23,26 +30,29 @@ Both parts use plain JavaScript (no TypeScript).
 
 ```
 murii/
+├── render.yaml            # Render Blueprint for the backend API
 ├── backend/
 │   ├── .env.example
 │   └── src/
 │       ├── config/        # environment loading and database connection
-│       ├── controllers/   # auth, settings, product, sale, stock, party, payment, invoice, expense, cash book, bank account, production, staff, dashboard and report handlers
-│       ├── middleware/    # JWT auth, error handling
+│       ├── controllers/   # auth, settings, product, sale, stock, party, payment, invoice, expense, cash book, bank account, production, staff, dashboard, report, backup, audit and cancellation handlers
+│       ├── middleware/    # JWT auth, async errors, 404 and central error handling
 │       ├── models/        # User, BusinessSettings, Product, Sale, Counter, ProductStock, StockTransaction, Party, PartyPayment, WholesaleInvoice, ExpenseCategory, Expense, CashAdjustment, CashCount, BankAccount, BankTransaction, Production, Staff, StaffTransaction
-│       ├── routes/        # /api/auth, /api/settings, /api/products, /api/sales, /api/stock, /api/parties, /api/invoices, /api/expenses, /api/cash-book, /api/bank-accounts, /api/production, /api/staff, /api/dashboard, /api/reports
-│       ├── services/      # token signing, product and category seeds, sales, wholesale invoices, party ledger, stock, expenses, cash book, bank accounts, production, staff, dashboard aggregation, reports, bill numbers
+│       ├── routes/        # /api/auth, /api/settings, /api/products, /api/sales, /api/stock, /api/parties, /api/invoices, /api/expenses, /api/cash-book, /api/bank-accounts, /api/production, /api/staff, /api/dashboard, /api/reports, /api/backup, /api/audit
+│       ├── services/      # token signing, seeds, sales, wholesale invoices, party ledger, stock, expenses, cash book, bank accounts, production, staff, dashboard aggregation, reports, backup, audit, cancellation, bill numbers
 │       ├── utils/         # async wrapper, HTTP errors, validators, stock types, local-date helpers
-│       ├── app.js         # Express app
+│       ├── app.js         # Express app (helmet, CORS, body limit, rate limits)
 │       └── server.js      # startup entry point
 └── frontend/
+    ├── .env.example       # VITE_API_URL for deployed builds
+    ├── vercel.json        # SPA rewrites for Vercel
     └── src/
-        ├── components/    # layout pieces, form fields, dialogs (expense, opening cash, physical cash, bank account, bank transaction, bank transfer, production), receipt, invoice sheet, production report, sales chart, report preview dialog, payment dialog, icons
+        ├── components/    # layout pieces, form fields, dialogs (expense, opening cash, physical cash, bank account, bank transaction, bank transfer, production, cancellation, confirm), receipt, invoice sheet, production report, sales chart, report preview dialog, payment dialog, icons
         ├── hooks/         # authentication and business-settings contexts
         ├── layouts/       # sidebar + header application shell
-        ├── pages/         # login, dashboard, reports, settings, products, retail billing, stock, wholesale, parties, party ledger, receivables, expenses, cash book, bank accounts, bank account ledger, production, staff, staff ledger, placeholders
+        ├── pages/         # login, dashboard, reports, settings, products, retail billing, stock, wholesale, parties, party ledger, receivables, expenses, cash book, bank accounts, bank account ledger, production, staff, staff ledger, audit trail, placeholders
         ├── services/      # Axios instance and API calls
-        └── utils/         # currency, dates, validation, billing, stock, invoice, production, report definitions, report CSV/PDF, WhatsApp reminder helpers and other PDFs
+        └── utils/         # currency, dates, validation, billing, stock, invoice, production, navigation, report definitions, report CSV/PDF, WhatsApp share helpers and other PDFs
 ```
 
 ## Prerequisites
@@ -79,21 +89,22 @@ Edit `backend/.env`:
 | ------------- | -------- | ------------------------------------------------------------------ |
 | `MONGODB_URI` | Yes      | MongoDB connection string, e.g. `mongodb://127.0.0.1:27017/tirupati_muri` |
 | `JWT_SECRET`  | Yes      | Random secret for signing tokens. Must be at least 32 characters.  |
-| `PORT`        | No       | Backend port. Defaults to `5000`.                                  |
-| `CLIENT_URL`  | No       | Allowed frontend origin for CORS. Defaults to `http://localhost:5173`. |
+| `PORT`        | No       | Backend port. Defaults to `5000` (the host sets it in production).  |
+| `CLIENT_URL`  | No       | Allowed frontend origin(s) for CORS, comma-separated. Defaults to `http://localhost:5173`. |
 | `NODE_ENV`    | No       | `development` or `production`.                                     |
+| `TRUST_PROXY` | No       | Set to `true` behind Render/Railway/Nginx so rate limiting uses the real client IP. |
 
 Generate a strong JWT secret with:
 
 ```bash
-node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"
+node -e "console.log(require('crypto').randomBytes(48).toString('base64url'))"
 ```
 
 Never commit `.env` or paste the real secret into frontend code.
 
 The frontend calls `/api` through the Vite development proxy, so no frontend environment
-variables are required locally. To point the frontend at a different API host, create
-`frontend/.env` with:
+variables are required locally. To point the frontend at a different API host, copy
+`frontend/.env.example` to `frontend/.env` and set:
 
 ```
 VITE_API_URL=https://your-api-host/api
@@ -149,6 +160,9 @@ Production commands:
 cd backend && npm start
 cd frontend && npm run build
 ```
+
+For hosting (Vercel, Render/Railway, Atlas) see
+[21. Production deployment](#21-production-deployment).
 
 ## 5. Create the first user
 
@@ -372,6 +386,9 @@ Due totals plus the invoice footer.
   application and print only the A4 invoice (`@page size: A4`).
 - **Download PDF** saves `invoice-<number>.pdf` with the same A4 layout. The PDF uses `Rs.`
   instead of `₹` because the built-in PDF fonts do not include the rupee glyph.
+- **Share on WhatsApp** opens click-to-chat with the party's phone and a message containing the
+  business name, invoice number, date, total, paid and outstanding. The button is disabled when
+  the party has no phone number, and nothing is sent until you press Send in WhatsApp.
 - **New invoice** closes the dialog and clears the quantities for the next sale.
 
 ### Invoice history
@@ -511,6 +528,15 @@ are removed, a leading `0` on an 11-digit number is dropped, and a 10-digit Indi
 the `91` country code. No paid WhatsApp API, template approval or server-side messaging is used
 — the user reviews the message in WhatsApp and sends it themselves.
 
+### Send ledger on WhatsApp
+
+**Send Ledger on WhatsApp** on the party page opens click-to-chat with a statement summary
+containing the party name, the date it was generated, the opening balance, total invoices, total
+payments received and the current outstanding. It is available even when nothing is due (for
+example as a settled-account confirmation) and is disabled only when the party has no phone
+number. The message is built from the same ledger figures shown on the page; the detailed
+transaction lines are not included, and **Ledger PDF** is the way to share the full statement.
+
 ### End-to-end example
 
 With 1,000 KG of opening stock and a 500 KG invoice at ₹40:
@@ -581,29 +607,31 @@ the configured opening date shows zeroes, a notice that opening cash starts late
 disabled physical count. Changing the amount or date recalculates every cash book figure,
 including the dashboard.
 
-### Daily cash view
+### Daily closing
 
-The page has **Previous day** / **Next day** / **Today** navigation and a date picker. The daily
-view shows the required rows:
+The page has **Previous day** / **Next day** / **Today** navigation and a date picker. The
+**Daily closing** card shows the nine closing figures in order:
 
-| Row                 | Source                                                                 |
-| ------------------- | ---------------------------------------------------------------------- |
-| Opening cash        | Opening balance plus the net cash flow of all earlier days             |
-| Cash sales          | Retail sales paid in cash and the paid portion of cash wholesale invoices |
-| Party collections   | Cash payments received from parties (`PAY-...`)                        |
-| Other income        | Cash count surplus adjustments (`ADJ-...`)                             |
-| Expenses            | Cash operating expenses                                                |
-| Staff payments      | Cash expenses in the **Salary** category plus cash staff advances and salary payments (`STF-...`) |
-| Loan payments       | Cash expenses in the **Loan Interest** category                        |
-| Closing cash        | Opening plus cash in, minus cash out                                   |
+| Row                      | Source                                                                 |
+| ------------------------ | ---------------------------------------------------------------------- |
+| Opening cash             | Opening balance plus the net cash flow of all earlier days             |
+| Cash sales               | Retail sales paid in cash and the paid portion of cash wholesale invoices |
+| Cash collections         | Cash payments received from parties (`PAY-...`)                        |
+| Cash expenses            | Cash operating expenses plus cash expenses in the **Loan Interest** category |
+| Staff payments           | Cash expenses in the **Salary** category plus cash staff advances and salary payments (`STF-...`) |
+| Other cash transactions  | Net of cash-count surplus and shortage adjustments (`ADJ-...`)         |
+| Expected closing cash    | Opening + cash sales + collections + other − cash expenses − staff     |
+| Physical cash            | The latest cash amount counted for the date, or **not counted yet**    |
+| Difference               | Physical cash minus expected closing cash                              |
 
-Each cash expense is counted once: Salary goes to **Staff payments**, Loan Interest to
-**Loan payments**, and every other cash expense to **Expenses**. UPI and bank expenses are
-excluded entirely. **Other cash outflows** holds cash count shortages.
+Each cash expense is counted once: Salary goes to **Staff payments**, Loan Interest to **Cash
+expenses**, and every other cash expense to **Cash expenses**. UPI and bank expenses are excluded
+entirely. The card also shows the recorded **closing notes**, the count time and whether the cash
+book was adjusted.
 
 The **Cash transactions** table lists every cash movement for the selected date with reference,
 description, cash in, cash out and running balance. The running balance starts at the opening
-cash and ends at the closing cash.
+cash and ends at the expected closing cash.
 
 ### Credit sales are not cash
 
@@ -612,17 +640,19 @@ produces **Sales ₹20,000**, **Cash ₹0** and **Receivable ₹20,000**; it doe
 cash book. Wholesale invoices with `paymentMethod: cash` contribute only their **paid** amount,
 never the unpaid due.
 
-### Physical cash count
+### Physical cash and closing notes
 
-**Physical count** (or **Count again**) compares the expected closing cash with the cash
-actually counted for the selected date. The dialog shows the expected amount, the physical
-amount, the live **Difference**, and a history of the latest count.
+**Daily closing** (or **Update closing**) opens the closing dialog for the selected date. It
+shows the expected closing cash, the physical amount, the live **Difference** and prefills the
+previous count, reason and notes when one exists.
 
 - With **Adjust cash book to match** unticked, the count is stored for comparison only.
-- With it ticked, the difference is written as a numbered adjustment (`ADJ-000001`, ...).
-  A surplus becomes **Other cash income**; a shortage becomes **Other cash outflows**.
+- With it ticked, the difference is written as a numbered adjustment (`ADJ-000001`, ...) and
+  appears under **Other cash transactions**.
 - A **reason** is required whenever the cash book is adjusted for a non-zero difference.
   A matched count creates no adjustment and needs no reason.
+- **Closing notes** (up to 500 characters) are saved with the count and shown on the daily
+  closing card.
 
 A count cannot be recorded for a future date or before the opening date. If creating the
 adjustment fails, the count is rolled back, so the two collections never disagree.
@@ -683,7 +713,8 @@ A negative result is allowed and is shown in red; the app does not block an over
 records what actually happened. The **Bank Accounts** page shows every account with its
 **Account**, **Balance**, **Today's inflow** and **Today's outflow**, plus summary cards for
 **Total bank balance**, **Active accounts** and today's total inflow/outflow. Clicking an account
-opens its ledger.
+opens its ledger. The account page also offers **Ledger PDF**, which downloads the full
+transaction ledger with the account summary and running balance.
 
 ### Transaction ledger
 
@@ -893,6 +924,9 @@ Four cards summarise the account at all times: **Salary payable** (salary + bonu
 Salary payable − deductions − advance − paid = remaining payable
 ```
 
+**Ledger PDF** downloads the full staff ledger with the summary cards, every entry and the
+running balance.
+
 ### Recording a payment
 
 Click **Record payment** (or **Record an advance**) and choose **Cash**, **UPI** or **Bank**:
@@ -1066,6 +1100,151 @@ summary, table, totals, secondary table and notes. **Download CSV** (on the page
 preview) writes a UTF-8 CSV with the same metadata, summary, rows, totals and notes; the file is
 named `report-<key>-<date>.csv` and the PDF `report-<key>-<date>.pdf`.
 
+---
+
+## 19. Data export and backups
+
+Open **Settings → Export data**.
+
+- **Download JSON** writes a full backup named `tirupati-backup-YYYY-MM-DD.json`. It contains a
+  `meta` block (application, version, export time, dataset row counts) plus business settings,
+  the signed-in account's name/email (never the password hash) and these datasets: products,
+  parties, retail sales, wholesale invoices, party payments, expenses, expense categories, staff,
+  staff transactions, bank accounts, bank transactions, production, stock transactions, daily
+  cash counts and cash adjustments.
+- **Download CSV** exports one dataset at a time, named `<dataset>-YYYY-MM-DD.csv`. The file is
+  UTF-8 with a BOM so Excel opens the Rupee sign correctly, flattens nested fields with dot
+  notation and escapes commas, quotes and line breaks.
+- Exports include cancelled documents (marked with their cancellation fields) so the file is a
+  complete audit copy rather than only the current working set.
+
+Exports are available only to a signed-in user and are sent with `Cache-Control: no-store`.
+
+### MongoDB Atlas backup
+
+A JSON export is a readable copy, not a restorable database dump. Keep Atlas snapshots as the
+real disaster-recovery backup:
+
+1. In MongoDB Atlas open **Database → your cluster → Backup** and enable **Cloud Backup**
+   (daily snapshots, or continuous backup for a busy mill).
+2. Set the snapshot retention to at least 7 days. Download one archive every month and keep it
+   on encrypted offline storage with the JSON exports.
+3. Restore either with the Atlas **Restore** action, or by downloading the archive and running
+   `mongorestore --uri "<atlas connection string>" --gzip --archive=backup.gz`.
+4. Test a restore into a temporary database at least once a quarter.
+
+## 20. Audit trail and cancellations
+
+Nothing is deleted. Every transactional document stores `createdAt` and `updatedAt`
+(Mongoose timestamps) plus its own reference number (`R-`, `INV-`, `PAY-`, `EXP-`, `STF-`,
+`PROD-`, `BTX-`, `TRF-`). Cancelling a record sets `cancelled: true`, `cancelledAt` and an
+optional `cancelReason`. A cancelled record stays in MongoDB but is filtered out of every list,
+ledger, report, dashboard card and balance by a shared model plugin, so history is preserved
+without affecting current figures.
+
+Cancel actions are available where the transaction is listed:
+
+| Cancel from            | Effect besides marking CANCELLED                                             |
+| ---------------------- | ---------------------------------------------------------------------------- |
+| Retail billing         | Restores the sold quantity to stock with a referenced adjustment             |
+| Wholesale invoice      | Restores stock and cancels the linked bank `sales-collection` entry          |
+| Party ledger           | Cancels the linked bank `party-payment` entry; outstanding recalculates       |
+| Expenses               | Cancels the linked bank `expense` entry; the cash book recalculates           |
+| Staff ledger           | Cancels the linked bank `staff-payment` entry and frees the salary month     |
+| Production history     | Reverses the finished Muri through a stock adjustment; refuses if stock is insufficient (`409`) |
+| Bank ledger            | Cancels both sides of a `TRF-` transfer, or a manual `BTX-` entry            |
+
+Bank entries created automatically by another module cannot be cancelled from the bank ledger;
+the API returns `400` and asks you to cancel the source document instead, so money movements are
+never orphaned. Cancelling is confirmed in a dialog with an optional reason.
+
+**Audit Trail** (Insights section) lists every cancelled transaction newest first with its type,
+reference, original date, amount, cancellation time and reason. It supports search across
+reference, type, description and reason. The list is also part of the JSON backup.
+
+---
+
+## 21. Production deployment
+
+The application is split into three independently deployed pieces:
+
+| Piece    | Host                    | Root directory |
+| -------- | ----------------------- | -------------- |
+| Frontend | Vercel                  | `frontend`     |
+| Backend  | Render (or Railway)     | `backend`      |
+| Database | MongoDB Atlas           | —              |
+
+The repository already contains `render.yaml` (backend Blueprint), `frontend/vercel.json`
+(SPA rewrites) and both `.env.example` files. Nothing is deployed automatically.
+
+### 21.1 MongoDB Atlas
+
+1. Create a free or paid cluster and a database user with read/write access.
+2. Allow access from `0.0.0.0/0` (Render/Railway use dynamic egress IPs) or add the host's
+   static outbound IPs if you have them.
+3. Copy the connection string and add the database name:
+   `mongodb+srv://<user>:<password>@<cluster>.mongodb.net/tirupati_muri?retryWrites=true&w=majority`
+4. Enable **Cloud Backup** and set retention (see [MongoDB Atlas backup](#mongodb-atlas-backup)).
+
+### 21.2 Backend on Render
+
+1. Push the repository to GitHub, then in Render choose **New → Blueprint** and select the repo.
+   `render.yaml` creates a Node web service named `tirupati-muri-api` with root directory
+   `backend`, build command `npm ci`, start command `npm start` and health check `/api/health`.
+2. Set the two unsynced variables:
+   - `MONGODB_URI` — the Atlas connection string.
+   - `CLIENT_URL` — the Vercel URL(s), comma-separated, for example
+     `https://tirupati-muri.vercel.app,https://www.your-domain.com`.
+   `JWT_SECRET` is generated by the Blueprint; you can replace it with your own 32+ character
+   random string. `NODE_ENV=production` and `TRUST_PROXY=true` are set for you.
+3. Deploy and confirm `https://<service>.onrender.com/api/health` returns
+   `{"status":"ok","database":"connected"}`.
+
+On Railway the same values apply: root directory `backend`, build `npm ci`, start `npm start`,
+health check `/api/health`, plus the same environment variables.
+
+### 21.3 Frontend on Vercel
+
+1. Import the repository, set **Root Directory** to `frontend`. Vercel detects Vite
+   (build `npm run build`, output `dist`).
+2. Add the environment variable `VITE_API_URL` set to the backend API URL including `/api`,
+   for example `https://tirupati-muri-api.onrender.com/api`.
+3. Deploy. `vercel.json` rewrites every path to `index.html` so React Router routes work on
+   refresh; assets are served as static files.
+4. Add the Vercel production domain (and any custom domain) to `CLIENT_URL` on the backend and
+   redeploy it, otherwise the browser receives a CORS error.
+
+### 21.4 Environment variables
+
+| Variable      | Where    | Production value                                                        |
+| ------------- | -------- | ----------------------------------------------------------------------- |
+| `NODE_ENV`    | Backend  | `production`                                                            |
+| `PORT`        | Backend  | Set by the host; do not hard-code                                          |
+| `MONGODB_URI` | Backend  | Atlas connection string with the database name                          |
+| `JWT_SECRET`  | Backend  | Random string of 32+ characters; never commit it                          |
+| `CLIENT_URL`  | Backend  | Comma-separated frontend origins, e.g. `https://app.vercel.app`         |
+| `TRUST_PROXY` | Backend  | `true` behind Render/Railway/Nginx so rate limiting sees the real IP    |
+| `VITE_API_URL`| Frontend | Backend URL ending in `/api`                                            |
+
+Secrets exist only in the hosting dashboards. `backend/.env` is git-ignored and must never be
+committed; only `.env.example` files belong in Git.
+
+### 21.5 Production checklist
+
+- Backend starts in production mode, hides 5xx details and logs in combined format.
+- Helmet security headers are sent on every response; `X-Powered-By` is disabled.
+- Rate limiting: 1000 requests per 15 minutes per IP for the API, 20 attempts per 15 minutes for
+  login and first-time setup.
+- CORS accepts only the origins listed in `CLIENT_URL`; the request body limit is 100 KB.
+- `npm run build` in `frontend` completes with no errors and `npm run lint` passes.
+- A fresh database seeds the Muri product and the 11 expense categories on first start.
+- Sign in once to confirm the JWT flow, then create the first user through the setup screen.
+- Confirm `GET /api/health` from the host and open one report to verify database access.
+- Keep Atlas Cloud Backup enabled and download a JSON export from **Settings → Export data**
+  periodically, as described in [Data export and backups](#19-data-export-and-backups).
+
+---
+
 ## API endpoints
 
 | Method | Path               | Auth | Purpose                              |
@@ -1122,6 +1301,21 @@ named `report-<key>-<date>.csv` and the PDF `report-<key>-<date>.pdf`.
 | POST   | `/api/staff/:id/transactions` | Yes | Record a salary, bonus, advance, payment, deduction or recovery entry |
 | GET    | `/api/dashboard`   | Yes  | Business dashboard for a range (`range=today\|week\|month\|custom`, plus `from`/`to`) |
 | GET    | `/api/reports/:report` | Yes | Run one of the twelve reports (`from`, `to`, `date`, `month`, `asOf`, `party`, `account`, `category`, `search` as applicable) |
+| GET    | `/api/backup/datasets` | Yes | List the datasets available for CSV export |
+| GET    | `/api/backup/export` | Yes | Download a full JSON backup (`format=json`) or one CSV dataset (`format=csv&dataset=<key>`) |
+| GET    | `/api/audit/cancelled` | Yes | List cancelled transactions (`search`, `limit`, max 500) |
+| POST   | `/api/sales/:id/cancel` | Yes | Cancel a retail sale, restore stock and mark it CANCELLED |
+| POST   | `/api/invoices/:id/cancel` | Yes | Cancel a wholesale invoice, restore stock and cancel linked bank entries |
+| POST   | `/api/parties/:id/payments/:paymentId/cancel` | Yes | Cancel a party payment and its linked bank entry |
+| POST   | `/api/expenses/:id/cancel` | Yes | Cancel an expense and its linked bank entry |
+| POST   | `/api/staff/:id/transactions/:transactionId/cancel` | Yes | Cancel a staff entry, release the salary month and cancel linked bank entries |
+| POST   | `/api/production/:id/cancel` | Yes | Cancel a production batch and reverse its finished stock |
+| POST   | `/api/bank-accounts/:id/transactions/:transactionId/cancel` | Yes | Cancel a manual bank entry or both sides of a transfer |
+
+Every cancel route accepts `{ "reason": "optional text, max 300 characters" }` and returns the
+updated record with a confirmation `message`. Cancelling an already cancelled record returns
+`404`; cancelling a bank entry that was created by another module returns `400` so the source
+document is cancelled instead.
 
 Protected routes expect `Authorization: Bearer <token>`. Products are never deleted; use
 `PUT /api/products/:id` with `{ "active": false }` to retire one.
@@ -1299,7 +1493,7 @@ invoice dues as cash.
 - MongoDB connection through Mongoose
 - Single-user authentication: bcrypt hashing, JWT, protected routes, logout
 - First-time setup flow for the owner account
-- Responsive sidebar/header layout with all 15 navigation entries
+- Responsive sidebar/header layout with all 16 navigation entries, including the Audit Trail
 - Business dashboard calculated with MongoDB aggregation from real transactions: Today, This Week, This Month and Custom ranges, with eight cards, a daily sales chart, monthly sales comparison, expense and cash-flow breakdowns, receivables, production, stock and low-stock warning
 - Dashboard accounting that keeps sales, collections, expenses, cash, bank, loans and receivables separate: loans never count as sales, unpaid credit invoices never count as cash received and party payments never count as new sales
 - Report centre with twelve reports (daily sales, monthly sales, date-range sales, expenses, cash book, bank, party outstanding, party ledger, stock, production, staff and loan), each with date filtering, search where useful, an A4 preview, browser printing, PDF download and CSV export
@@ -1318,6 +1512,8 @@ invoice dues as cash.
 - Accounts receivable with outstanding, last payment and last invoice, sorted by highest amount due
 - Credit-limit checks that reject invoices over the limit before stock or invoice numbers are used
 - WhatsApp click-to-chat payment reminders pre-filled with the party, outstanding and business name
+- Wholesale invoice actions: Print, Download PDF and Share on WhatsApp with a message containing the business name, invoice number, date, total, paid and outstanding
+- Send Ledger on WhatsApp from the party ledger, and Send Payment Reminder from outstanding parties, both pre-filled and generated in the browser
 - Wholesale invoices with live total, paid and due calculation and cash/UPI/bank/credit payment
 - Sequential invoice numbers (`INV-000001`, `INV-000002`, ...) that are not consumed by rejected invoices
 - Invoice-level paid and due tracking with Paid, Partially Paid and Credit statuses
@@ -1327,6 +1523,7 @@ invoice dues as cash.
 - Expense management with 11 seeded categories, custom categories, server-assigned `EXP-000001` numbers and cash/bank classification
 - Daily cash book with opening cash, cash sales, party collections, other income, expenses, staff and loan payments, other outflows and closing cash
 - Cash transactions with a running balance and credit sales excluded from cash in hand
+- Complete daily closing with opening cash, cash sales, cash collections, cash expenses, other income, staff payments, other outflows, expected closing cash, physical cash, difference and closing notes; difference is recalculated live after any cancellation
 - Physical cash counts comparing expected and physical cash, with reason-required `ADJ-` adjustments for surpluses and shortages
 - Dashboard Today's Expenses and Cash in Hand driven by actual expense and cash book transactions
 - Multiple bank accounts with bank/account name, unique normalised account number, opening balance and active status
@@ -1348,11 +1545,15 @@ invoice dues as cash.
 - Cash and bank staff payments that reduce the cash book or the selected bank account through a `staff-payment` outflow, with rollback on failure
 - Dashboard staff cards for today's staff payments and the monthly salary expense
 - "Coming Soon" placeholder for the loan module, which is the only module not implemented yet
-- Server-side validation, consistent error responses, loading and empty states, toasts
+- Audit trail that keeps cancelled retail sales, invoices, party payments, expenses, staff entries, production batches and manual bank entries as CANCELLED with a timestamp and reason, while reversing stock and linked bank movements
+- PDF download for every important document: thermal receipt, wholesale invoice, party ledger, staff ledger, bank ledger, production history, loan report and all twelve reports
+- Security hardening: helmet headers, API and login rate limiting, CORS allow-list, 100 KB JSON limit, hidden 5xx details and no secrets in the frontend bundle
+- Deployment-ready configuration: `render.yaml`, `frontend/vercel.json`, `.env.example` files, production build and this deployment guide
+- Server-side validation, consistent error responses, loading, error and empty states, confirmation dialogs, search, date filters and success toasts across the pages
 
 ## What is intentionally not included yet
 
-Reports are implemented. A dedicated loan module is not: the bank ledger has loan receipt and
+A dedicated loan module is not implemented: the bank ledger has loan receipt and
 loan repayment types, and cash expenses in the Loan Interest category feed the Loan payments row,
 but there is no loan account, amortisation or outstanding tracking, so the Loan report only lists
 recorded loan receipts and repayments and the dashboard shows loan outstanding as not tracked.
@@ -1363,8 +1564,10 @@ there is no cheque management, reconciliation against bank statements or automat
 The cash book still tracks the single cash account separately from the bank accounts. Staff
 salary, advances and payments are recorded in the
 staff module; there is no attendance, leave, overtime or payslip generation. WhatsApp
-integration is limited to click-to-chat payment reminders; no paid WhatsApp Business API or
-automatic server-side sending is used. No fake invoices, stock,
+integration is limited to click-to-chat messages; no paid WhatsApp Business API or
+automatic server-side sending is used. Lists are bounded by server-side limits (for example the
+latest 200 expenses or 500 cancelled records) and older records are reached with search and date
+filters; there is no page-by-page pagination. No fake invoices, stock,
 transactions or accounting calculations are generated by this release.
 
 ## Notes
@@ -1390,10 +1593,16 @@ transactions or accounting calculations are generated by this release.
 - Staff names are snapshotted onto each `STF-` entry, so renaming a staff member never rewrites
   history. Cash staff payments appear in the cash book's Staff payments row, and UPI/Bank staff
   payments write a `staff-payment` bank outflow.
-- Payment reminders open `https://wa.me/...` in a new tab. The message is generated in the
-  browser and nothing is sent until the user presses Send in WhatsApp.
-- Receipt, invoice, report and production PDFs use `Rs.` instead of `₹` because the built-in PDF
-  fonts do not include the rupee glyph. On-screen and printed documents show `₹`.
+- Payment reminders, invoice sharing and ledger sharing open `https://wa.me/...` in a new tab.
+  The message is generated in the browser and nothing is sent until the user presses Send in
+  WhatsApp. The invoice message contains the business name, invoice number, date, total, paid and
+  outstanding; the ledger message contains the opening balance, invoices, payments received,
+  outstanding and the date it was generated.
+- Cancelled documents are kept with `cancelled`, `cancelledAt` and `cancelReason` and are excluded
+  from every find, count and aggregation. Cancelling reverses the related stock and bank
+  movements, so no ledger silently keeps money or stock from a cancelled document.
+- Receipt, invoice, ledger, report and production PDFs use `Rs.` instead of `₹` because the
+  built-in PDF fonts do not include the rupee glyph. On-screen and printed documents show `₹`.
 - Dashboard and report totals are computed in MongoDB with aggregation pipelines and
   `$dateToString` buckets; the browser receives computed figures, not whole transaction lists.
 - Dashboard cards mix as-of balances and range figures on purpose. Stock, bank and receivable
@@ -1403,16 +1612,30 @@ transactions or accounting calculations are generated by this release.
 - Sales are accrual-based: retail bill amounts plus wholesale invoice totals, including credit.
   Collections are only recorded party payments and cash receipts. Unpaid invoice dues stay in
   receivables, and loan receipts stay in the bank/cash ledger, so no amount is counted twice.
+- All API responses are protected by helmet headers and rate limits, and 5xx responses never leak
+  stack traces or database details to the browser.
 - The interface is English-only and designed desktop-first, with a responsive mobile drawer.
 - The frontend dev server proxies `/api` to `http://localhost:5000`. If you change `PORT`,
-  update `frontend/vite.config.js` (or set `VITE_API_URL`).
+  update `frontend/vite.config.js` (or set `VITE_API_URL`). Deployed builds use `VITE_API_URL`.
 
 ## Troubleshooting
 
 - **Backend exits with "Missing required environment variables"** — `backend/.env` is missing
   or incomplete. Copy `.env.example` and fill in the values.
+- **Backend exits with "JWT_SECRET must be at least 32 characters long"** — generate a longer
+  value, e.g. `node -e "console.log(require('crypto').randomBytes(48).toString('base64url'))"`.
 - **MongoDB connection failed** — confirm the MongoDB service is running and the URI is correct.
+  For Atlas also confirm the database user, the database name in the URI and the IP allow-list.
 - **CORS error in the browser** — make sure `CLIENT_URL` matches the URL you open the frontend on.
+  For multiple frontends (Vercel preview plus custom domain) separate them with commas and no
+  spaces: `https://app.vercel.app,https://www.example.com`. Redeploy the backend after changing it.
+- **`429 Too Many Requests`** — the API allows 1000 requests per 15 minutes per IP and 20 login
+  attempts per 15 minutes. Wait for the window to reset. Set `TRUST_PROXY=true` when deployed
+  behind Render/Railway so the real client IP is used instead of the proxy.
+- **Vercel shows 404 after refreshing a page** — deploy with root directory `frontend` so
+  `vercel.json` rewrites unknown paths to `index.html`.
+- **Frontend loads but every request fails in production** — `VITE_API_URL` is missing or lacks
+  `/api`. Set it to the backend URL ending in `/api` and redeploy (Vite bakes it into the build).
 - **Port already in use** — change `PORT` for the backend and the proxy target in
   `frontend/vite.config.js`, or stop the process using port 5000/5173.
 - **"Initial setup is already complete"** — an account already exists; sign in instead.

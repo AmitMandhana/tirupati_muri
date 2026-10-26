@@ -1,5 +1,6 @@
 import { Router } from 'express';
 
+import { cancelSaleHandler } from '../controllers/cancellationController.js';
 import {
   createSale,
   getSale,
@@ -16,5 +17,6 @@ router.get('/', listSales);
 router.post('/', createSale);
 router.get('/summary', getSalesSummary);
 router.get('/:id', getSale);
+router.post('/:id/cancel', cancelSaleHandler);
 
 export default router;

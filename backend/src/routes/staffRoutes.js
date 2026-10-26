@@ -1,5 +1,6 @@
 import { Router } from 'express';
 
+import { cancelStaffTransactionHandler } from '../controllers/cancellationController.js';
 import {
   addStaff,
   addStaffTransactionHandler,
@@ -20,5 +21,6 @@ router.get('/summary', getStaffSummaryHandler);
 router.get('/:id', getStaffMember);
 router.put('/:id', editStaff);
 router.post('/:id/transactions', addStaffTransactionHandler);
+router.post('/:id/transactions/:transactionId/cancel', cancelStaffTransactionHandler);
 
 export default router;

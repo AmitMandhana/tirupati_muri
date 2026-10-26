@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import toast from 'react-hot-toast';
 
 import FormField from '../components/FormField';
+import CancelTransactionDialog from '../components/CancelTransactionDialog';
 import NavIcon from '../components/NavIcon';
 import PageHeader from '../components/PageHeader';
 import PartyFormDialog from '../components/PartyFormDialog';
@@ -10,6 +11,7 @@ import Spinner from '../components/Spinner';
 import StatCard from '../components/StatCard';
 import WholesaleInvoiceDialog from '../components/WholesaleInvoiceDialog';
 import { createInvoiceApi, getInvoicesApi } from '../services/invoiceService';
+import { cancelInvoiceApi } from '../services/cancelService';
 import { getBankAccountsApi } from '../services/bankAccountService';
 import { getPartiesApi, getReceivablesApi } from '../services/partyService';
 import { getProductsApi } from '../services/productService';
@@ -94,6 +96,8 @@ const WholesalePage = () => {
   const [isLoadingHistory, setIsLoadingHistory] = useState(true);
   const [historyError, setHistoryError] = useState('');
   const [historyToken, setHistoryToken] = useState(0);
+  const [cancelTarget, setCancelTarget] = useState(null);
+  const [isCancelling, setIsCancelling] = useState(false);
 
   const quantityRef = useRef(null);
 
@@ -471,6 +475,29 @@ const WholesalePage = () => {
   const openInvoice = (invoice) => {
     setInvoiceDialogMode('view');
     setInvoiceDialog(invoice);
+  };
+
+  const handleCancelInvoice = async (reason) => {
+    if (!cancelTarget) {
+      return;
+    }
+
+    setIsCancelling(true);
+
+    try {
+      const data = await cancelInvoiceApi(cancelTarget._id, reason);
+      toast.success(data.message ?? 'Invoice cancelled.');
+      setCancelTarget(null);
+      refreshHistory();
+      refreshParties();
+      refreshProducts();
+      setStockToken((token) => token + 1);
+      setPartyBalancesToken((token) => token + 1);
+    } catch (error) {
+      toast.error(getApiErrorMessage(error, 'Unable to cancel the invoice.'));
+    } finally {
+      setIsCancelling(false);
+    }
   };
 
   const isLoading = isLoadingParties || isLoadingProducts;
@@ -1136,13 +1163,22 @@ const WholesalePage = () => {
                       <StatusPill status={invoice.status} />
                     </td>
                     <td className="px-5 py-3.5 text-right">
-                      <button
-                        type="button"
-                        className="rounded-md border border-cream-300 px-2.5 py-1.5 text-xs font-semibold text-ink-700 transition-colors hover:bg-cream-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40"
-                        onClick={() => openInvoice(invoice)}
-                      >
-                        View
-                      </button>
+                      <div className="inline-flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          className="rounded-md border border-cream-300 px-2.5 py-1.5 text-xs font-semibold text-ink-700 transition-colors hover:bg-cream-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40"
+                          onClick={() => openInvoice(invoice)}
+                        >
+                          View
+                        </button>
+                        <button
+                          type="button"
+                          className="rounded-md border border-red-200 px-2.5 py-1.5 text-xs font-semibold text-red-700 transition-colors hover:bg-red-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400/40"
+                          onClick={() => setCancelTarget(invoice)}
+                        >
+                          Cancel
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -1207,6 +1243,17 @@ const WholesalePage = () => {
           mode={invoiceDialogMode}
           onClose={closeInvoiceDialog}
           onNewInvoice={handleNewInvoice}
+        />
+      ) : null}
+
+      {cancelTarget ? (
+        <CancelTransactionDialog
+          title={`Cancel invoice ${cancelTarget.invoiceNumber}?`}
+          description={`Stock for ${formatQuantity(cancelTarget.quantity)} ${cancelTarget.unit} will be restored, any bank receipt will be reversed and the invoice will be marked CANCELLED in the audit trail. This cannot be undone.`}
+          confirmText="Cancel invoice"
+          isSaving={isCancelling}
+          onConfirm={handleCancelInvoice}
+          onClose={() => setCancelTarget(null)}
         />
       ) : null}
     </div>

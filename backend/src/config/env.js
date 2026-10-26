@@ -19,11 +19,18 @@ if (process.env.JWT_SECRET.trim().length < 32) {
   throw new Error('JWT_SECRET must be at least 32 characters long.');
 }
 
+const clientOrigins = (process.env.CLIENT_URL || 'http://localhost:5173')
+  .split(',')
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+
 export const env = Object.freeze({
   nodeEnv: process.env.NODE_ENV || 'development',
   isProduction: process.env.NODE_ENV === 'production',
   port: Number(process.env.PORT) || 5000,
   mongoUri: process.env.MONGODB_URI.trim(),
   jwtSecret: process.env.JWT_SECRET.trim(),
-  clientUrl: process.env.CLIENT_URL?.trim() || 'http://localhost:5173',
+  clientUrl: clientOrigins[0],
+  clientOrigins,
+  trustProxy: process.env.TRUST_PROXY === 'true',
 });

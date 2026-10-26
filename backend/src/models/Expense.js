@@ -1,5 +1,7 @@
 import mongoose from 'mongoose';
 
+import { cancelledPlugin } from './plugins/cancelled.js';
+
 export const EXPENSE_PAYMENT_METHODS = ['cash', 'upi', 'bank'];
 export const EXPENSE_ACCOUNTS = ['cash', 'bank'];
 
@@ -73,5 +75,6 @@ const expenseSchema = new mongoose.Schema(
 expenseSchema.index({ expenseDate: -1, _id: -1 });
 expenseSchema.index({ account: 1, expenseDate: 1 });
 expenseSchema.index({ categoryKey: 1, expenseDate: -1 });
+expenseSchema.plugin(cancelledPlugin);
 
 export const Expense = mongoose.model('Expense', expenseSchema);

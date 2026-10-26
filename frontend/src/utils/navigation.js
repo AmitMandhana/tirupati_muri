@@ -28,7 +28,10 @@ export const NAV_SECTIONS = [
   },
   {
     label: 'Insights',
-    items: [{ to: '/reports', label: 'Reports', icon: 'reports' }],
+    items: [
+      { to: '/reports', label: 'Reports', icon: 'reports' },
+      { to: '/audit-trail', label: 'Audit Trail', icon: 'audit' },
+    ],
   },
   {
     label: 'System',

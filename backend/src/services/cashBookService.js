@@ -6,7 +6,10 @@ import { PartyPayment } from '../models/PartyPayment.js';
 import { Sale } from '../models/Sale.js';
 import { STAFF_PAYMENT_TYPES, StaffTransaction } from '../models/StaffTransaction.js';
 import { WholesaleInvoice } from '../models/WholesaleInvoice.js';
-import { getNextCashAdjustmentNumber } from './billNumberService.js';
+import {
+  getNextCashAdjustmentNumber,
+  getNextCashClosingNumber,
+} from './billNumberService.js';
 import {
   endOfLocalDay,
   getTodayDateKey,
@@ -81,6 +84,7 @@ const parseBoolean = (value, fallback = false) => {
 
 const toCountView = (count) => ({
   _id: count._id,
+  closingNumber: count.closingNumber ?? '',
   countDate: count.countDate,
   expectedCash: roundMoney(count.expectedCash),
   physicalCash: roundMoney(count.physicalCash),
@@ -463,6 +467,22 @@ export const getCashBook = async (dateInput) => {
         effective: 0,
       },
       summary: { ...emptySummary },
+      closing: {
+        openingCash: 0,
+        cashSales: 0,
+        cashCollections: 0,
+        cashExpenses: 0,
+        staffPayments: 0,
+        otherCashTransactions: 0,
+        expectedClosingCash: 0,
+        physicalCash: null,
+        difference: null,
+        notes: '',
+        reason: '',
+        adjusted: false,
+        countedAt: null,
+        isCounted: false,
+      },
       entries: [],
       latestCount: null,
     };
@@ -482,6 +502,7 @@ export const getCashBook = async (dateInput) => {
     day.expenses + day.staffPayments + day.loanPayments + day.otherOutflows,
   );
   const closingCash = roundMoney(openingCash + day.net);
+  const latestCount = day.latestCount ? toCountView(day.latestCount) : null;
 
   return {
     date: dateKey,
@@ -504,8 +525,25 @@ export const getCashBook = async (dateInput) => {
       totalOut,
       closingCash,
     },
+    closing: {
+      openingCash,
+      cashSales: day.cashSales,
+      cashCollections: day.partyCollections,
+      cashExpenses: roundMoney(day.expenses + day.loanPayments),
+      staffPayments: day.staffPayments,
+      otherCashTransactions: roundMoney(day.otherIncome - day.otherOutflows),
+      expectedClosingCash: closingCash,
+      physicalCash: latestCount ? latestCount.physicalCash : null,
+      difference: latestCount ? roundMoney(latestCount.physicalCash - closingCash) : null,
+      notes: latestCount?.notes ?? '',
+      reason: latestCount?.reason ?? '',
+      adjusted: latestCount?.adjusted ?? false,
+      closingNumber: latestCount?.closingNumber ?? '',
+      countedAt: latestCount?.countedAt ?? null,
+      isCounted: Boolean(latestCount),
+    },
     entries: buildEntries(day, openingCash),
-    latestCount: day.latestCount ? toCountView(day.latestCount) : null,
+    latestCount,
   };
 };
 
@@ -617,7 +655,10 @@ export const recordCashCount = async (body = {}) => {
   let count;
 
   try {
+    const closingNumber = await getNextCashClosingNumber();
+
     count = await CashCount.create({
+      closingNumber,
       countDate,
       expectedCash,
       physicalCash,

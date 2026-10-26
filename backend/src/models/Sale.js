@@ -1,5 +1,7 @@
 import mongoose from 'mongoose';
 
+import { cancelledPlugin } from './plugins/cancelled.js';
+
 const saleSchema = new mongoose.Schema(
   {
     billNumber: {
@@ -76,5 +78,6 @@ const saleSchema = new mongoose.Schema(
 );
 
 saleSchema.index({ saleType: 1, createdAt: -1 });
+saleSchema.plugin(cancelledPlugin);
 
 export const Sale = mongoose.model('Sale', saleSchema);
