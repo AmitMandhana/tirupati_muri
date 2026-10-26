@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 
 import Logo from '../components/Logo';
@@ -5,21 +6,8 @@ import NavIcon from '../components/NavIcon';
 import StatCard from '../components/StatCard';
 import { useAuth } from '../hooks/useAuth';
 import { useBusinessSettings } from '../hooks/useBusinessSettings';
+import { getSalesSummaryApi } from '../services/saleService';
 import { formatLongDate } from '../utils/format';
-
-const todayStats = [
-  { title: "Today's Sales", icon: 'billing', hint: 'No sales recorded today' },
-  { title: "Today's Expenses", icon: 'expenses', hint: 'No expenses recorded today' },
-  { title: 'Cash in Hand', icon: 'cashbook', hint: 'Cash book not started' },
-  { title: 'Bank Balance', icon: 'bank', hint: 'No bank accounts added' },
-];
-
-const businessStats = [
-  { title: 'Party Receivable', icon: 'parties', hint: 'No party balances yet' },
-  { title: 'Muri Stock', icon: 'stock', hint: 'Stock module not started' },
-  { title: 'Monthly Sales', icon: 'reports', hint: 'No sales this month' },
-  { title: 'Loan Outstanding', icon: 'loans', hint: 'No loans recorded' },
-];
 
 const quickLinks = [
   { to: '/retail-billing', label: 'Retail Billing', icon: 'billing', description: 'Counter sales' },
@@ -39,6 +27,73 @@ const DashboardPage = () => {
   const { user } = useAuth();
   const { settings } = useBusinessSettings();
   const firstName = user?.name?.trim().split(/\s+/)[0];
+  const [summary, setSummary] = useState(null);
+  const [summaryFailed, setSummaryFailed] = useState(false);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    getSalesSummaryApi()
+      .then((data) => {
+        if (isMounted) {
+          setSummary(data.summary);
+          setSummaryFailed(false);
+        }
+      })
+      .catch(() => {
+        if (isMounted) {
+          setSummaryFailed(true);
+        }
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const today = summary?.today;
+  const month = summary?.month;
+  const billCount = (count) => `${count} ${count === 1 ? 'bill' : 'bills'}`;
+
+  const todaySalesHint = summaryFailed
+    ? 'Sales summary unavailable'
+    : !summary
+      ? "Loading today's sales..."
+      : today.count > 0
+        ? `${billCount(today.count)} today`
+        : 'No sales recorded today';
+
+  const monthlySalesHint = summaryFailed
+    ? 'Sales summary unavailable'
+    : !summary
+      ? "Loading this month's sales..."
+      : month.count > 0
+        ? `${billCount(month.count)} this month`
+        : 'No sales this month';
+
+  const todayStats = [
+    {
+      title: "Today's Sales",
+      icon: 'billing',
+      hint: todaySalesHint,
+      value: summary ? today.total : null,
+    },
+    { title: "Today's Expenses", icon: 'expenses', hint: 'No expenses recorded today', value: 0 },
+    { title: 'Cash in Hand', icon: 'cashbook', hint: 'Cash book not started', value: 0 },
+    { title: 'Bank Balance', icon: 'bank', hint: 'No bank accounts added', value: 0 },
+  ];
+
+  const businessStats = [
+    { title: 'Party Receivable', icon: 'parties', hint: 'No party balances yet', value: 0 },
+    { title: 'Muri Stock', icon: 'stock', hint: 'Stock module not started', value: 0 },
+    {
+      title: 'Monthly Sales',
+      icon: 'reports',
+      hint: monthlySalesHint,
+      value: summary ? month.total : null,
+    },
+    { title: 'Loan Outstanding', icon: 'loans', hint: 'No loans recorded', value: 0 },
+  ];
 
   return (
     <div className="space-y-6">
@@ -53,9 +108,9 @@ const DashboardPage = () => {
             </h1>
             <p className="mt-1 text-sm font-medium text-ink-500">Business Management System</p>
             <p className="mt-4 max-w-2xl text-sm leading-relaxed text-ink-500">
-              Welcome back{firstName ? `, ${firstName}` : ''}. This is the foundation release. The
-              dashboard figures below will fill in as billing, stock and accounting modules are
-              added.
+              Welcome back{firstName ? `, ${firstName}` : ''}. Retail billing is live: today&apos;s
+              sales below are calculated from recorded bills. Stock and accounting figures will
+              fill in as later modules are added.
             </p>
           </div>
           <div className="hidden shrink-0 sm:block">
@@ -67,11 +122,11 @@ const DashboardPage = () => {
       <section>
         <SectionHeading
           title="Today"
-          description="Figures will appear once billing and expenses are enabled."
+          description="Retail bills update these figures automatically."
         />
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           {todayStats.map((stat) => (
-            <StatCard key={stat.title} {...stat} value={0} />
+            <StatCard key={stat.title} {...stat} />
           ))}
         </div>
       </section>
@@ -83,7 +138,7 @@ const DashboardPage = () => {
         />
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           {businessStats.map((stat) => (
-            <StatCard key={stat.title} {...stat} value={0} />
+            <StatCard key={stat.title} {...stat} />
           ))}
         </div>
       </section>
@@ -120,13 +175,12 @@ const DashboardPage = () => {
 
         <section className="card border-brand-100 bg-brand-50/50 p-6">
           <span className="pill border border-brand-200 bg-white uppercase tracking-[0.12em] text-brand-700">
-            Foundation release
+            Retail billing live
           </span>
           <h2 className="mt-4 text-base font-semibold text-ink-900">What is included now</h2>
           <p className="mt-2 text-sm leading-relaxed text-ink-500">
-            Sign-in, business settings, the product catalogue and the application layout are ready.
-            Billing, stock, production, staff, loan and reporting modules will be added step by
-            step.
+            Sign-in, business settings, the product catalogue and retail billing are ready. Stock,
+            production, staff, loan and reporting modules will be added step by step.
           </p>
           <Link
             to="/settings"

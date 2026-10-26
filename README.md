@@ -1,9 +1,10 @@
 # Tirupati Puffed Rice Mill — Management System
 
 A cloud-based business management web application for a puffed rice (muri) mill. This release
-includes authentication, the application shell, the dashboard, business settings and the
-product master. Billing, stock, production, staff, loans and reports are represented by clearly
-marked "Coming Soon" pages and will be added in later phases.
+includes authentication, the application shell, the dashboard, business settings, the product
+master and fast retail billing with printable thermal receipts. Wholesale, stock, production,
+staff, loans and reports are represented by clearly marked "Coming Soon" pages and will be
+added in later phases.
 
 ## Tech stack
 
@@ -20,22 +21,22 @@ murii/
 │   ├── .env.example
 │   └── src/
 │       ├── config/        # environment loading and database connection
-│       ├── controllers/   # auth, settings and product request handlers
+│       ├── controllers/   # auth, settings, product and sale request handlers
 │       ├── middleware/    # JWT auth, error handling
-│       ├── models/        # User, BusinessSettings, Product
-│       ├── routes/        # /api/auth, /api/settings, /api/products
-│       ├── services/      # token signing, initial product seed
+│       ├── models/        # User, BusinessSettings, Product, Sale, Counter
+│       ├── routes/        # /api/auth, /api/settings, /api/products, /api/sales
+│       ├── services/      # token signing, initial product seed, sale billing and bill numbers
 │       ├── utils/         # async wrapper, HTTP errors, validators
 │       ├── app.js         # Express app
 │       └── server.js      # startup entry point
 └── frontend/
     └── src/
-        ├── components/    # layout pieces, form fields, dialogs, icons
+        ├── components/    # layout pieces, form fields, dialogs, thermal receipt, icons
         ├── hooks/         # authentication and business-settings contexts
         ├── layouts/       # sidebar + header application shell
-        ├── pages/         # login, dashboard, settings, products, placeholders
+        ├── pages/         # login, dashboard, settings, products, retail billing, placeholders
         ├── services/      # Axios instance and API calls
-        └── utils/         # currency, dates, validation, navigation
+        └── utils/         # currency, dates, validation, billing helpers, receipt PDF
 ```
 
 ## Prerequisites
@@ -167,8 +168,8 @@ browser's local storage and are validated against `GET /api/auth/me` on page loa
 4. Refresh the page. The saved values (and the business name in the sidebar) persist because
    they are stored in MongoDB.
 
-The Muri rates and bag weight are saved as business-level defaults. Billing modules are not
-built yet, and these values are not hard-coded anywhere in the UI.
+The Muri rates and bag weight are saved as business-level defaults. Retail billing reads the
+live retail rate from the product master, not from these business-level defaults.
 
 ## 7. Manage products
 
@@ -181,6 +182,45 @@ section of the sidebar to:
   `GET /api/products?active=true` (the list future sales screens will use).
 
 Products are never hard-deleted, so future transactions can keep referring to them.
+
+## 8. Retail billing
+
+Open **Retail Billing** from the sidebar. The page is designed for fast counter sales:
+
+1. **Product** defaults to the first active product (Muri is seeded). The rate field is
+   prefilled from that product's retail rate in the Product Master; it is never hard-coded and
+   can still be adjusted for an individual bill.
+2. **Amount → KG** is the default mode. Type an amount, or tap a ₹50/₹100/₹200/₹500 shortcut,
+   and the quantity is calculated live: `quantity = amount ÷ rate`. At ₹45/KG, ₹100 shows
+   **2.22 KG**.
+3. Switch to **KG → Amount** to enter the weight instead: `amount = quantity × rate`
+   (2.2 KG × ₹45 = ₹99).
+4. Choose **Cash**, **UPI**, **Bank** or **Credit**. Credit sales require a
+   customer/party name. An optional note can be added.
+5. Click **Complete sale**. A success dialog offers **Print receipt**, **Download PDF** and
+   **New sale**.
+
+Quantities are stored with up to 6 decimal places for accurate calculations and shown with 2
+decimals. Amounts are stored and shown with 2 decimals. Bill numbers are sequential and
+concurrency-safe: `R-000001`, `R-000002`, `R-000003`, ...
+
+### Receipts
+
+The receipt dialog previews a monospace thermal receipt and lets you switch between **58 mm**
+and **80 mm** paper. **Print receipt** uses the browser's print dialog with `@media print` CSS
+that hides the application and prints only the receipt at the chosen width. **Download PDF**
+saves a matching PDF named `receipt-<bill number>.pdf`. The receipt contains the business
+name, address and phone (from Settings), bill number, date and time, product, quantity × rate,
+total, payment method, customer/party for credit sales, notes, **Thank You** and the receipt
+footer from Settings.
+
+### Sales data
+
+Every sale stores the bill number, sale type (`retail`), product reference plus a snapshot of
+the product name and unit, quantity, rate, amount, payment method, customer/party name, note
+and timestamps. The dashboard's **Today's Sales** and **Monthly Sales** cards are calculated
+from these records. Stock is not deducted yet; the sale service is structured so stock
+integration can be added in the next phase, and no fake stock values are shown.
 
 ## API endpoints
 
@@ -196,9 +236,18 @@ Products are never hard-deleted, so future transactions can keep referring to th
 | POST   | `/api/products`    | Yes  | Create a product                     |
 | GET    | `/api/products/:id`| Yes  | Read one product                     |
 | PUT    | `/api/products/:id`| Yes  | Update a product or its active status |
+| POST   | `/api/sales`       | Yes  | Create a retail sale and return its bill number |
+| GET    | `/api/sales`       | Yes  | List recent sales (optional `type`, `limit`) |
+| GET    | `/api/sales/summary` | Yes | Today's and this month's retail totals |
+| GET    | `/api/sales/:id`   | Yes  | Read one sale                        |
 
 Protected routes expect `Authorization: Bearer <token>`. Products are never deleted; use
 `PUT /api/products/:id` with `{ "active": false }` to retire one.
+
+`POST /api/sales` accepts `{ product, inputMode, amount | quantity, rate?, paymentMethod,
+customerName?, notes? }`. `inputMode` is `amount` (default) or `quantity`; `rate` defaults to
+the product's retail rate. Credit sales require `customerName`. Bill numbers are generated on
+the server and cannot be supplied by the client.
 
 ## What is included in this release
 
@@ -207,21 +256,26 @@ Protected routes expect `Authorization: Bearer <token>`. Products are never dele
 - Single-user authentication: bcrypt hashing, JWT, protected routes, logout
 - First-time setup flow for the owner account
 - Responsive sidebar/header layout with all 13 navigation entries
-- Dashboard shell with empty (₹0) placeholder cards and Indian currency formatting
+- Dashboard with real today's and monthly sales figures from retail sale records
 - Business settings saved to MongoDB, including receipt/invoice footers, Muri rates and bag weight
 - Product master with search, add, edit and activate/deactivate; Muri is seeded on first start
+- Fast retail billing in both Amount → KG and KG → Amount modes, with cash/UPI/bank/credit payment
+- Sequential bill numbers (`R-000001`, `R-000002`, ...) generated safely under concurrent sales
+- Thermal receipt preview and printing at 58 mm and 80 mm, plus receipt PDF download
 - "Coming Soon" placeholders for all future modules
 - Server-side validation, consistent error responses, loading and empty states, toasts
 
 ## What is intentionally not included yet
 
-Retail billing, wholesale, parties, stock, production, staff, expenses, cash book, bank
-accounts, loans, reports and WhatsApp integration. No fake invoices, stock, transactions or
-accounting calculations are generated by this release.
+Wholesale billing, parties, stock, production, staff, expenses, cash book, bank accounts, loans,
+reports and WhatsApp integration. No fake invoices, stock, transactions or accounting
+calculations are generated by this release.
 
 ## Notes
 
 - Currency is formatted for India with the `en-IN` locale, e.g. `₹1,00,000`.
+- Receipt PDFs use `Rs.` instead of `₹` because the built-in PDF fonts do not include the
+  rupee glyph. On-screen and printed receipts show `₹`.
 - The interface is English-only and designed desktop-first, with a responsive mobile drawer.
 - The frontend dev server proxies `/api` to `http://localhost:5000`. If you change `PORT`,
   update `frontend/vite.config.js` (or set `VITE_API_URL`).

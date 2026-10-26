@@ -6,6 +6,7 @@ import morgan from 'morgan';
 import { env } from './config/env.js';
 import authRoutes from './routes/authRoutes.js';
 import productRoutes from './routes/productRoutes.js';
+import saleRoutes from './routes/saleRoutes.js';
 import settingsRoutes from './routes/settingsRoutes.js';
 import { errorHandler, notFound } from './middleware/errorMiddleware.js';
 
@@ -31,6 +32,7 @@ app.get('/api/health', (req, res) => {
 app.use('/api/auth', authRoutes);
 app.use('/api/settings', settingsRoutes);
 app.use('/api/products', productRoutes);
+app.use('/api/sales', saleRoutes);
 
 app.use(notFound);
 app.use(errorHandler);

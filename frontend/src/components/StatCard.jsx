@@ -9,7 +9,9 @@ const StatCard = ({ title, value = 0, icon = 'dashboard', hint = 'No entries yet
         <NavIcon name={icon} className="h-[18px] w-[18px]" />
       </span>
     </div>
-    <p className="mt-3 text-2xl font-semibold tracking-tight text-ink-900">{formatINR(value)}</p>
+    <p className="mt-3 text-2xl font-semibold tracking-tight text-ink-900">
+      {value === null || value === undefined ? '—' : formatINR(value)}
+    </p>
     <p className="mt-1 text-xs text-ink-400">{hint}</p>
   </article>
 );
