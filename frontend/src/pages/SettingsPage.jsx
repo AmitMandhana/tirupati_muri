@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import toast from 'react-hot-toast';
 
 import FormField from '../components/FormField';
@@ -18,9 +19,35 @@ const SETTINGS_FIELDS = [
   'email',
   'gstNumber',
   'ownerName',
+  'receiptFooter',
+  'invoiceFooter',
+  'retailMuriRate',
+  'wholesaleMuriRate',
+  'bagWeightKg',
 ];
 
-const normalizedValues = (values) => SETTINGS_FIELDS.map((field) => (values[field] ?? '').trim());
+const NUMERIC_FIELDS = new Set(['retailMuriRate', 'wholesaleMuriRate', 'bagWeightKg']);
+
+const normalizedValues = (values) =>
+  SETTINGS_FIELDS.map((field) => {
+    const value = values[field];
+
+    if (NUMERIC_FIELDS.has(field)) {
+      return value === '' || value === null || value === undefined ? '' : Number(value);
+    }
+
+    return typeof value === 'string' ? value.trim() : (value ?? '');
+  });
+
+const toNumber = (value) => {
+  const text = String(value ?? '').trim();
+  if (!text) {
+    return null;
+  }
+
+  const number = Number(text);
+  return Number.isFinite(number) ? number : null;
+};
 
 const BusinessSettingsForm = ({ initialValues }) => {
   const { saveSettings } = useBusinessSettings();
@@ -68,6 +95,29 @@ const BusinessSettingsForm = ({ initialValues }) => {
       nextErrors.gstNumber = 'Enter a valid 15 character GST number.';
     }
 
+    if (formData.receiptFooter.trim().length > 500) {
+      nextErrors.receiptFooter = 'Receipt footer cannot be longer than 500 characters.';
+    }
+
+    if (formData.invoiceFooter.trim().length > 500) {
+      nextErrors.invoiceFooter = 'Invoice footer cannot be longer than 500 characters.';
+    }
+
+    const retailMuriRate = toNumber(formData.retailMuriRate);
+    if (retailMuriRate === null || retailMuriRate < 0) {
+      nextErrors.retailMuriRate = 'Enter a rate of ₹0 or more.';
+    }
+
+    const wholesaleMuriRate = toNumber(formData.wholesaleMuriRate);
+    if (wholesaleMuriRate === null || wholesaleMuriRate < 0) {
+      nextErrors.wholesaleMuriRate = 'Enter a rate of ₹0 or more.';
+    }
+
+    const bagWeightKg = toNumber(formData.bagWeightKg);
+    if (bagWeightKg === null || bagWeightKg <= 0) {
+      nextErrors.bagWeightKg = 'Bag weight must be greater than 0.';
+    }
+
     setErrors(nextErrors);
     return Object.keys(nextErrors).length === 0;
   };
@@ -87,6 +137,11 @@ const BusinessSettingsForm = ({ initialValues }) => {
       email: formData.email.trim(),
       gstNumber: formData.gstNumber.trim().toUpperCase(),
       ownerName: formData.ownerName.trim(),
+      receiptFooter: formData.receiptFooter.trim(),
+      invoiceFooter: formData.invoiceFooter.trim(),
+      retailMuriRate: toNumber(formData.retailMuriRate),
+      wholesaleMuriRate: toNumber(formData.wholesaleMuriRate),
+      bagWeightKg: toNumber(formData.bagWeightKg),
     };
 
     setIsSaving(true);
@@ -221,6 +276,114 @@ const BusinessSettingsForm = ({ initialValues }) => {
             </FormField>
           </div>
         </div>
+
+        <div>
+          <h3 className="text-[11px] font-semibold uppercase tracking-[0.16em] text-ink-400">
+            Rates and packaging
+          </h3>
+          <p className="mt-1 text-xs text-ink-500">
+            Business-level defaults for Muri. Product rates are managed in Product Management.
+          </p>
+          <div className="mt-3 grid gap-4 sm:grid-cols-3">
+            <FormField
+              label="Retail muri rate (₹/KG)"
+              htmlFor="retail-muri-rate"
+              error={errors.retailMuriRate}
+            >
+              <input
+                id="retail-muri-rate"
+                type="number"
+                inputMode="decimal"
+                min="0"
+                step="0.01"
+                className={fieldInputClass(Boolean(errors.retailMuriRate))}
+                placeholder="45"
+                value={formData.retailMuriRate}
+                onChange={(event) => updateField('retailMuriRate', event.target.value)}
+              />
+            </FormField>
+
+            <FormField
+              label="Wholesale muri rate (₹/KG)"
+              htmlFor="wholesale-muri-rate"
+              error={errors.wholesaleMuriRate}
+            >
+              <input
+                id="wholesale-muri-rate"
+                type="number"
+                inputMode="decimal"
+                min="0"
+                step="0.01"
+                className={fieldInputClass(Boolean(errors.wholesaleMuriRate))}
+                placeholder="42"
+                value={formData.wholesaleMuriRate}
+                onChange={(event) => updateField('wholesaleMuriRate', event.target.value)}
+              />
+            </FormField>
+
+            <FormField
+              label="Bag weight (KG)"
+              htmlFor="bag-weight"
+              error={errors.bagWeightKg}
+            >
+              <input
+                id="bag-weight"
+                type="number"
+                inputMode="decimal"
+                min="0.1"
+                step="0.1"
+                className={fieldInputClass(Boolean(errors.bagWeightKg))}
+                placeholder="50"
+                value={formData.bagWeightKg}
+                onChange={(event) => updateField('bagWeightKg', event.target.value)}
+              />
+            </FormField>
+          </div>
+        </div>
+
+        <div>
+          <h3 className="text-[11px] font-semibold uppercase tracking-[0.16em] text-ink-400">
+            Document footers
+          </h3>
+          <p className="mt-1 text-xs text-ink-500">
+            Printed at the bottom of future receipts and invoices.
+          </p>
+          <div className="mt-3 grid gap-4 sm:grid-cols-2">
+            <FormField
+              label="Receipt footer"
+              htmlFor="receipt-footer"
+              error={errors.receiptFooter}
+              hint="Optional. Up to 500 characters."
+            >
+              <textarea
+                id="receipt-footer"
+                rows={3}
+                maxLength={500}
+                className={`${fieldInputClass(Boolean(errors.receiptFooter))} resize-y`}
+                placeholder="Thank you for your business."
+                value={formData.receiptFooter}
+                onChange={(event) => updateField('receiptFooter', event.target.value)}
+              />
+            </FormField>
+
+            <FormField
+              label="Invoice footer"
+              htmlFor="invoice-footer"
+              error={errors.invoiceFooter}
+              hint="Optional. Up to 500 characters."
+            >
+              <textarea
+                id="invoice-footer"
+                rows={3}
+                maxLength={500}
+                className={`${fieldInputClass(Boolean(errors.invoiceFooter))} resize-y`}
+                placeholder="Goods once sold will not be taken back."
+                value={formData.invoiceFooter}
+                onChange={(event) => updateField('invoiceFooter', event.target.value)}
+              />
+            </FormField>
+          </div>
+        </div>
       </div>
 
       <div className="flex flex-col gap-3 border-t border-cream-200 bg-cream-50/70 px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
@@ -268,7 +431,7 @@ const SettingsPage = () => {
   const pageHeader = (
     <PageHeader
       title="Business settings"
-      description="Manage the mill's profile details. These values are saved to MongoDB and used throughout the application."
+      description="Manage the mill's profile, rates and document footers. These values are saved to MongoDB and used throughout the application."
     />
   );
 
@@ -356,11 +519,21 @@ const SettingsPage = () => {
             </table>
           </section>
 
+          <section className="card p-6">
+            <h2 className="text-base font-semibold text-ink-900">Product catalogue</h2>
+            <p className="mt-1 text-sm text-ink-500">
+              Manage Muri and other products, including their retail and wholesale rates.
+            </p>
+            <Link to="/products" className="btn-secondary mt-4 w-full">
+              Open Product Management
+            </Link>
+          </section>
+
           <section className="card border-brand-100 bg-brand-50/60 p-6">
             <h2 className="text-base font-semibold text-ink-900">About these settings</h2>
             <p className="mt-2 text-sm leading-relaxed text-ink-500">
-              Business name updates in the sidebar, header and dashboard after saving. Contact and
-              GST details are stored for use in future billing and report modules.
+              Business name updates in the sidebar, header and dashboard after saving. Muri rates,
+              bag weight and document footers are stored for use in future billing modules.
             </p>
           </section>
         </aside>

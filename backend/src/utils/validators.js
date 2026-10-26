@@ -15,3 +15,5 @@ export const isValidPhone = (value) => {
 };
 
 export const isValidGstNumber = (value) => GSTIN_PATTERN.test(value);
+
+export const escapeRegExp = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');

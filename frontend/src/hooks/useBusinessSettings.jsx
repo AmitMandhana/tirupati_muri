@@ -10,6 +10,11 @@ export const DEFAULT_BUSINESS_SETTINGS = {
   email: '',
   gstNumber: '',
   ownerName: '',
+  receiptFooter: '',
+  invoiceFooter: '',
+  retailMuriRate: 45,
+  wholesaleMuriRate: 42,
+  bagWeightKg: 50,
 };
 
 const BusinessSettingsContext = createContext(null);

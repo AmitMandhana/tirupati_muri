@@ -13,6 +13,7 @@ import LoansPage from './pages/LoansPage';
 import LoginPage from './pages/LoginPage';
 import PartiesPage from './pages/PartiesPage';
 import ProductionPage from './pages/ProductionPage';
+import ProductsPage from './pages/ProductsPage';
 import ReportsPage from './pages/ReportsPage';
 import RetailBillingPage from './pages/RetailBillingPage';
 import SettingsPage from './pages/SettingsPage';
@@ -69,6 +70,7 @@ function App() {
             <Route path="bank-accounts" element={<BankAccountsPage />} />
             <Route path="loans" element={<LoansPage />} />
             <Route path="reports" element={<ReportsPage />} />
+            <Route path="products" element={<ProductsPage />} />
             <Route path="settings" element={<SettingsPage />} />
           </Route>
 

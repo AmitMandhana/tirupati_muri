@@ -15,6 +15,11 @@ const DEFAULT_SETTINGS = {
   email: '',
   gstNumber: '',
   ownerName: '',
+  receiptFooter: '',
+  invoiceFooter: '',
+  retailMuriRate: 45,
+  wholesaleMuriRate: 42,
+  bagWeightKg: 50,
 };
 
 export const getSettings = asyncHandler(async (req, res) => {
@@ -24,7 +29,7 @@ export const getSettings = asyncHandler(async (req, res) => {
     return res.status(200).json({ settings: DEFAULT_SETTINGS });
   }
 
-  return res.status(200).json({ settings });
+  return res.status(200).json({ settings: { ...DEFAULT_SETTINGS, ...settings } });
 });
 
 export const updateSettings = asyncHandler(async (req, res) => {
@@ -35,6 +40,11 @@ export const updateSettings = asyncHandler(async (req, res) => {
     email: toText(req.body.email).toLowerCase(),
     gstNumber: toText(req.body.gstNumber).toUpperCase(),
     ownerName: toText(req.body.ownerName),
+    receiptFooter: toText(req.body.receiptFooter),
+    invoiceFooter: toText(req.body.invoiceFooter),
+    retailMuriRate: Number(req.body.retailMuriRate),
+    wholesaleMuriRate: Number(req.body.wholesaleMuriRate),
+    bagWeightKg: Number(req.body.bagWeightKg),
   };
 
   if (!payload.businessName) {
@@ -65,11 +75,31 @@ export const updateSettings = asyncHandler(async (req, res) => {
     throw httpError(400, 'Please enter a valid 15 character GST number.');
   }
 
+  if (payload.receiptFooter.length > 500) {
+    throw httpError(400, 'Receipt footer cannot be longer than 500 characters.');
+  }
+
+  if (payload.invoiceFooter.length > 500) {
+    throw httpError(400, 'Invoice footer cannot be longer than 500 characters.');
+  }
+
+  if (!Number.isFinite(payload.retailMuriRate) || payload.retailMuriRate < 0) {
+    throw httpError(400, 'Retail muri rate must be a number of 0 or more.');
+  }
+
+  if (!Number.isFinite(payload.wholesaleMuriRate) || payload.wholesaleMuriRate < 0) {
+    throw httpError(400, 'Wholesale muri rate must be a number of 0 or more.');
+  }
+
+  if (!Number.isFinite(payload.bagWeightKg) || payload.bagWeightKg <= 0) {
+    throw httpError(400, 'Bag weight must be greater than 0.');
+  }
+
   const settings = await BusinessSettings.findOneAndUpdate(
     {},
     { $set: payload },
     {
-      new: true,
+      returnDocument: 'after',
       upsert: true,
       runValidators: true,
       setDefaultsOnInsert: true,

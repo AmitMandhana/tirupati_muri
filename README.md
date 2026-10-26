@@ -1,9 +1,9 @@
 # Tirupati Puffed Rice Mill — Management System
 
-A cloud-based business management web application for a puffed rice (muri) mill. This is the
-foundation release: authentication, the application shell, the dashboard and business settings.
-Billing, stock, production, staff, loans and reports are represented by clearly marked
-"Coming Soon" pages and will be added in later phases.
+A cloud-based business management web application for a puffed rice (muri) mill. This release
+includes authentication, the application shell, the dashboard, business settings and the
+product master. Billing, stock, production, staff, loans and reports are represented by clearly
+marked "Coming Soon" pages and will be added in later phases.
 
 ## Tech stack
 
@@ -20,11 +20,11 @@ murii/
 │   ├── .env.example
 │   └── src/
 │       ├── config/        # environment loading and database connection
-│       ├── controllers/   # auth and settings request handlers
+│       ├── controllers/   # auth, settings and product request handlers
 │       ├── middleware/    # JWT auth, error handling
-│       ├── models/        # User, BusinessSettings
-│       ├── routes/        # /api/auth, /api/settings
-│       ├── services/      # token signing and verification
+│       ├── models/        # User, BusinessSettings, Product
+│       ├── routes/        # /api/auth, /api/settings, /api/products
+│       ├── services/      # token signing, initial product seed
 │       ├── utils/         # async wrapper, HTTP errors, validators
 │       ├── app.js         # Express app
 │       └── server.js      # startup entry point
@@ -33,7 +33,7 @@ murii/
         ├── components/    # layout pieces, form fields, dialogs, icons
         ├── hooks/         # authentication and business-settings contexts
         ├── layouts/       # sidebar + header application shell
-        ├── pages/         # login, dashboard, settings, placeholders
+        ├── pages/         # login, dashboard, settings, products, placeholders
         ├── services/      # Axios instance and API calls
         └── utils/         # currency, dates, validation, navigation
 ```
@@ -161,10 +161,26 @@ browser's local storage and are validated against `GET /api/auth/me` on page loa
 ## 6. Save business settings
 
 1. Open **Settings** from the sidebar.
-2. Update the business name, address, phone, email, GST number or owner name.
+2. Update the business name, address, phone, email, GST number, owner name, receipt and invoice
+   footers, retail Muri rate, wholesale Muri rate or bag weight.
 3. Click **Save settings**. A confirmation toast appears.
 4. Refresh the page. The saved values (and the business name in the sidebar) persist because
    they are stored in MongoDB.
+
+The Muri rates and bag weight are saved as business-level defaults. Billing modules are not
+built yet, and these values are not hard-coded anywhere in the UI.
+
+## 7. Manage products
+
+On first start the backend seeds one product, **Muri** (unit KG, retail ₹45, wholesale ₹42, bag
+weight 50) if the products collection is empty. Open **Product Management** from the System
+section of the sidebar to:
+
+- search, add and edit products with their retail rate, wholesale rate and bag weight;
+- deactivate a product, which keeps it in the catalogue but removes it from
+  `GET /api/products?active=true` (the list future sales screens will use).
+
+Products are never hard-deleted, so future transactions can keep referring to them.
 
 ## API endpoints
 
@@ -176,8 +192,13 @@ browser's local storage and are validated against `GET /api/auth/me` on page loa
 | GET    | `/api/auth/me`     | Yes  | Return the signed-in user            |
 | GET    | `/api/settings`    | Yes  | Read business settings               |
 | PUT    | `/api/settings`    | Yes  | Create or update business settings   |
+| GET    | `/api/products`    | Yes  | List products (optional `active` and `search` filters) |
+| POST   | `/api/products`    | Yes  | Create a product                     |
+| GET    | `/api/products/:id`| Yes  | Read one product                     |
+| PUT    | `/api/products/:id`| Yes  | Update a product or its active status |
 
-Protected routes expect `Authorization: Bearer <token>`.
+Protected routes expect `Authorization: Bearer <token>`. Products are never deleted; use
+`PUT /api/products/:id` with `{ "active": false }` to retire one.
 
 ## What is included in this release
 
@@ -187,7 +208,8 @@ Protected routes expect `Authorization: Bearer <token>`.
 - First-time setup flow for the owner account
 - Responsive sidebar/header layout with all 13 navigation entries
 - Dashboard shell with empty (₹0) placeholder cards and Indian currency formatting
-- Business settings form saved to MongoDB
+- Business settings saved to MongoDB, including receipt/invoice footers, Muri rates and bag weight
+- Product master with search, add, edit and activate/deactivate; Muri is seeded on first start
 - "Coming Soon" placeholders for all future modules
 - Server-side validation, consistent error responses, loading and empty states, toasts
 

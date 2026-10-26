@@ -31,7 +31,10 @@ export const NAV_SECTIONS = [
   },
   {
     label: 'System',
-    items: [{ to: '/settings', label: 'Settings', icon: 'settings' }],
+    items: [
+      { to: '/products', label: 'Product Management', icon: 'products' },
+      { to: '/settings', label: 'Settings', icon: 'settings' },
+    ],
   },
 ];
 

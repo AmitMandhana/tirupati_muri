@@ -10,6 +10,18 @@ export const formatINR = (value) => {
   return inrFormatter.format(Number.isFinite(amount) ? amount : 0);
 };
 
+const rateFormatter = new Intl.NumberFormat('en-IN', {
+  style: 'currency',
+  currency: 'INR',
+  minimumFractionDigits: 0,
+  maximumFractionDigits: 2,
+});
+
+export const formatRate = (value) => {
+  const amount = Number(value);
+  return rateFormatter.format(Number.isFinite(amount) ? amount : 0);
+};
+
 const longDateFormatter = new Intl.DateTimeFormat('en-IN', {
   weekday: 'long',
   day: 'numeric',

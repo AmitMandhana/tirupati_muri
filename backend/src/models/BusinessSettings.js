@@ -41,6 +41,33 @@ const businessSettingsSchema = new mongoose.Schema(
       trim: true,
       maxlength: [100, 'Owner name cannot be longer than 100 characters.'],
     },
+    receiptFooter: {
+      type: String,
+      default: '',
+      trim: true,
+      maxlength: [500, 'Receipt footer cannot be longer than 500 characters.'],
+    },
+    invoiceFooter: {
+      type: String,
+      default: '',
+      trim: true,
+      maxlength: [500, 'Invoice footer cannot be longer than 500 characters.'],
+    },
+    retailMuriRate: {
+      type: Number,
+      default: 45,
+      min: [0, 'Retail muri rate cannot be negative.'],
+    },
+    wholesaleMuriRate: {
+      type: Number,
+      default: 42,
+      min: [0, 'Wholesale muri rate cannot be negative.'],
+    },
+    bagWeightKg: {
+      type: Number,
+      default: 50,
+      min: [0.01, 'Bag weight must be greater than 0.'],
+    },
   },
   {
     timestamps: true,

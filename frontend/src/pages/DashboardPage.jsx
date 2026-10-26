@@ -124,8 +124,9 @@ const DashboardPage = () => {
           </span>
           <h2 className="mt-4 text-base font-semibold text-ink-900">What is included now</h2>
           <p className="mt-2 text-sm leading-relaxed text-ink-500">
-            Sign-in, business settings and the application layout are ready. Billing, stock,
-            production, staff, loan and reporting modules will be added step by step.
+            Sign-in, business settings, the product catalogue and the application layout are ready.
+            Billing, stock, production, staff, loan and reporting modules will be added step by
+            step.
           </p>
           <Link
             to="/settings"

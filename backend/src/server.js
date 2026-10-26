@@ -1,9 +1,11 @@
 import { env } from './config/env.js';
 import { connectDB, disconnectDB } from './config/db.js';
 import { app } from './app.js';
+import { seedInitialProduct } from './services/productSeed.js';
 
 const startServer = async () => {
   await connectDB();
+  await seedInitialProduct();
 
   const server = app.listen(env.port, () => {
     console.log(`API running on http://localhost:${env.port} (${env.nodeEnv})`);
