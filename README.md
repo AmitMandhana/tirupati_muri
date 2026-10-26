@@ -8,8 +8,9 @@ receipts, accounts receivable and WhatsApp payment reminders, expense management
 book with cash in hand, physical cash counts and adjustments, multi-account bank management
 with transaction ledgers and account-to-account transfers, and Muri production entries with
 yield and per-KG ratio calculation, finished-stock integration and printable production
-history. Staff, loans and reports are represented by clearly marked "Coming Soon" pages and
-will be added in later phases.
+history, staff accounts with salary payroll ledgers, a real-data business dashboard with
+range filters and a report centre with twelve printable/exportable reports. The loan module is
+still represented by a clearly marked "Coming Soon" page and will be added in a later phase.
 
 ## Tech stack
 
@@ -26,22 +27,22 @@ murii/
 │   ├── .env.example
 │   └── src/
 │       ├── config/        # environment loading and database connection
-│       ├── controllers/   # auth, settings, product, sale, stock, party, payment, invoice, expense, cash book, bank account and production handlers
+│       ├── controllers/   # auth, settings, product, sale, stock, party, payment, invoice, expense, cash book, bank account, production, staff, dashboard and report handlers
 │       ├── middleware/    # JWT auth, error handling
-│       ├── models/        # User, BusinessSettings, Product, Sale, Counter, ProductStock, StockTransaction, Party, PartyPayment, WholesaleInvoice, ExpenseCategory, Expense, CashAdjustment, CashCount, BankAccount, BankTransaction, Production
-│       ├── routes/        # /api/auth, /api/settings, /api/products, /api/sales, /api/stock, /api/parties, /api/invoices, /api/expenses, /api/cash-book, /api/bank-accounts, /api/production
-│       ├── services/      # token signing, product and category seeds, sales, wholesale invoices, party ledger, stock, expenses, cash book, bank accounts, production, bill numbers
+│       ├── models/        # User, BusinessSettings, Product, Sale, Counter, ProductStock, StockTransaction, Party, PartyPayment, WholesaleInvoice, ExpenseCategory, Expense, CashAdjustment, CashCount, BankAccount, BankTransaction, Production, Staff, StaffTransaction
+│       ├── routes/        # /api/auth, /api/settings, /api/products, /api/sales, /api/stock, /api/parties, /api/invoices, /api/expenses, /api/cash-book, /api/bank-accounts, /api/production, /api/staff, /api/dashboard, /api/reports
+│       ├── services/      # token signing, product and category seeds, sales, wholesale invoices, party ledger, stock, expenses, cash book, bank accounts, production, staff, dashboard aggregation, reports, bill numbers
 │       ├── utils/         # async wrapper, HTTP errors, validators, stock types, local-date helpers
 │       ├── app.js         # Express app
 │       └── server.js      # startup entry point
 └── frontend/
     └── src/
-        ├── components/    # layout pieces, form fields, dialogs (expense, opening cash, physical cash, bank account, bank transaction, bank transfer, production), receipt, invoice sheet, production report, payment dialog, icons
+        ├── components/    # layout pieces, form fields, dialogs (expense, opening cash, physical cash, bank account, bank transaction, bank transfer, production), receipt, invoice sheet, production report, sales chart, report preview dialog, payment dialog, icons
         ├── hooks/         # authentication and business-settings contexts
         ├── layouts/       # sidebar + header application shell
-        ├── pages/         # login, dashboard, settings, products, retail billing, stock, wholesale, parties, party ledger, receivables, expenses, cash book, bank accounts, bank account ledger, production, placeholders
+        ├── pages/         # login, dashboard, reports, settings, products, retail billing, stock, wholesale, parties, party ledger, receivables, expenses, cash book, bank accounts, bank account ledger, production, staff, staff ledger, placeholders
         ├── services/      # Axios instance and API calls
-        └── utils/         # currency, dates, validation, billing, stock, invoice, production, WhatsApp reminder helpers and PDFs
+        └── utils/         # currency, dates, validation, billing, stock, invoice, production, report definitions, report CSV/PDF, WhatsApp reminder helpers and other PDFs
 ```
 
 ## Prerequisites
@@ -300,8 +301,9 @@ never stored separately.
 
 ### Dashboard
 
-The **Muri Stock** card on the dashboard shows the current balance and bag count from the same
-stock service, and the dashboard warning links to the Stock page.
+The **Muri Stock** card shows the current balance, bag count and low-stock minimum from the same
+stock service, and the low-stock warning links to the Stock page. See
+[17. Business dashboard](#17-business-dashboard).
 
 ### Transaction types and production
 
@@ -639,9 +641,11 @@ Starting with no recorded cash, then setting opening cash **₹10,000** on today
 
 ### Dashboard
 
-The **Today's Expenses** card shows the total of every expense dated today (with the cash
-portion) and **Cash in Hand** shows today's closing cash from the cash book service. Both are
-derived from actual transactions, never stored totals.
+The **Expenses** card shows expenses dated inside the selected range (with the cash portion),
+and **Cash in Hand** shows closing cash as of the range end from the cash book service. The
+cash-flow section splits cash sales, collections, expenses and staff payments. All figures are
+derived from actual transactions, never stored totals. See
+[17. Business dashboard](#17-business-dashboard).
 
 ## 14. Bank accounts and transactions
 
@@ -747,8 +751,9 @@ invoices), so the source record and the bank ledger never disagree.
 
 ### Dashboard
 
-The **Bank Balance** card shows the combined balance of every bank account and how many accounts
-are active, recalculated from the bank ledgers on every request.
+The **Total Bank Balance** card shows the current combined balance of every bank account and how
+many accounts are active, recalculated from the bank ledgers on every request. See
+[17. Business dashboard](#17-business-dashboard).
 
 ## 15. Muri production and yield calculation
 
@@ -814,9 +819,9 @@ Both include the applied filters, every matching row and a totals row.
 
 ### Dashboard
 
-The **Production** section shows **Today's Production** and **Monthly Production** in KG (from
-the recorded production dates) and **Current Production Yield**, which is the yield of the most
-recent batch. Its hint names that batch and its date.
+The **Production** card and section show finished Muri for the selected range, the batch count,
+average yield, raw material, wastage and production cost. See
+[17. Business dashboard](#17-business-dashboard).
 
 ### Worked example
 
@@ -899,11 +904,12 @@ Click **Record payment** (or **Record an advance**) and choose **Cash**, **UPI**
 If the bank movement fails, the staff entry is deleted, so the ledger and the bank balance never
 disagree.
 
-### Dashboard
+### Dashboard and reports
 
-The **Staff** section shows **Today's Staff Payments** (cash and bank advances and payments
-recorded today, with the cash share) and **Monthly Salary Expense** (salary entries whose month
-is the current month, with the entry count and month name).
+Cash advances and salary payments appear in the dashboard's **Cash flow → Staff payments** row;
+the salary accrual itself never moves cash. The **Staff Report** (see
+[18. Reports](#18-reports)) lists salary, bonus, advances, payments, deductions and remaining
+payable for every staff member, with date filters and exports.
 
 ### Worked example
 
@@ -914,6 +920,151 @@ is the current month, with the entry count and month name).
    payments increase by **₹3,000**.
 4. Pay the remaining **₹12,000**. Remaining payable **₹0** and all dues are settled — the
    expected result.
+
+## 17. Business dashboard
+
+The dashboard is calculated entirely from recorded transactions on the server. It loads through
+a single `GET /api/dashboard` request and never receives a transaction list to total in the
+browser, and it contains no mock or sample figures.
+
+### Date range
+
+| Range      | Period                                                       |
+| ---------- | ------------------------------------------------------------ |
+| Today      | Today only                                                   |
+| This Week  | Monday of the current week through today                     |
+| This Month | The 1st of the current month through today                   |
+| Custom     | Any two dates up to today, at most 366 days, with from ≤ to  |
+
+The selected range drives the sales, expense, cash-flow, production and chart figures. Cash in
+hand is the closing balance on the range end date; stock, bank and party balances are current.
+Every request returns the resolved range (`key`, `fromKey`, `toKey`, `days`, `label`) so the UI
+and the API always agree on the period.
+
+### Cards
+
+| Card                  | Source                                                                 |
+| --------------------- | ---------------------------------------------------------------------- |
+| Sales                 | Retail `Sale.amount` + wholesale `WholesaleInvoice.total`, including credit invoices |
+| Expenses              | `Expense.amount` in the range, split into cash and bank                |
+| Cash in Hand          | Closing cash from the cash book service on the range end date          |
+| Total Bank Balance    | Sum of derived bank-account balances (`opening + inflow − outflow`)    |
+| Party Receivable      | Opening balances + invoices − invoice receipts − party payments        |
+| Muri Stock            | Current stock quantity, bag count and low-stock threshold              |
+| Production            | Finished Muri in the range, batch count and average yield              |
+| Loan Outstanding      | Shown as **not tracked**; the loan module is not part of this release  |
+
+### Sections
+
+- **Sales** — retail, wholesale and total sales, bill counts, wholesale paid/due, and a daily
+  stacked bar chart. Ranges longer than 62 days switch the chart to monthly buckets.
+- **Monthly sales** — current month versus the previous month, with the amount and percentage
+  change. This comparison always uses whole calendar months, independent of the range selector.
+- **Expenses** — today's and this month's expenses plus the top five expense categories.
+- **Cash flow** — cash inflow, cash outflow and net movement, split into cash sales, party
+  collections, other cash in, expenses, staff payments, loan payments and other cash out.
+- **Receivables** — total outstanding, the number of parties owing money, and the five largest
+  balances linked to their party ledgers.
+- **Production** — production quantity, batch count, average yield, raw material, wastage and cost.
+- **Stock** — current Muri stock, bags at the configured bag weight, low-stock minimum and a
+  low-stock warning linking to the Stock page.
+- **Accounting rules** — an on-screen reminder of how sales, collections, expenses, cash, bank,
+  loans and receivables are kept apart.
+
+### Accounting rules enforced
+
+- **Sales** are billed amounts and include credit invoices.
+- **Collections** are party payments and cash receipts. A party payment is never counted again
+  as a sale.
+- Only **cash** movements affect cash in hand: cash retail sales, the paid cash portion of
+  wholesale invoices, cash party collections, cash expenses, cash staff advances/payments and
+  cash adjustments. Credit invoices and unpaid dues never enter the cash book.
+- **Staff salary** accrues as payable and does not move cash. Only staff `advance` and `payment`
+  entries move cash or bank.
+- **Bank** movements are separate from cash, and **loans** are never added to sales.
+- Cash-flow movement is limited to the configured cash opening date, so transactions recorded
+  before the opening date cannot change cash in hand or the cash-flow figures.
+- **Receivables** are derived from opening balances, invoices, invoice receipts and later
+  payments.
+
+### Worked verification example
+
+With cash opening **₹2,000** on the range date: a ₹5,000 cash retail sale, a ₹2,000 credit
+retail sale, a ₹8,400 wholesale invoice with ₹4,000 received in cash, a ₹3,000 cash party
+payment, a ₹1,000 cash expense and a ₹500 cash staff advance produce:
+
+```
+Sales                = 5,000 + 2,000 + 8,400 = 15,400
+Collections          = 3,000
+Cash inflow          = 5,000 + 4,000 + 3,000 = 12,000
+Cash outflow         = 1,000 + 500 = 1,500
+Cash in hand         = 2,000 + 12,000 − 1,500 = 12,500
+Party receivable     = 8,400 − 4,000 − 3,000 = 1,400
+```
+
+The credit ₹2,000 retail sale raises sales and receivables but never appears in cash. This exact
+scenario is asserted by the backend verification script during development.
+
+## 18. Reports
+
+Open **Reports** from the Insights section. Twelve reports share one server-side report service,
+one A4 landscape print preview and the same CSV/PDF export pipeline.
+
+| Report                  | Date control       | Filters and focus                                                    |
+| ----------------------- | ------------------ | -------------------------------------------------------------------- |
+| Daily Sales             | One date           | Search reference, customer/party or product                          |
+| Monthly Sales           | Month (`YYYY-MM`)  | Day-by-day retail, wholesale and total, with the previous-month comparison |
+| Date Range Sales        | From / to          | Search reference, customer/party or product                          |
+| Expenses                | From / to          | Search and expense category; cash/bank split plus category breakdown |
+| Cash Book               | From / to          | Daily opening, cash sales, collections, expenses, staff, loans and closing cash |
+| Bank                    | From / to          | Search and bank account; money in, money out and net                 |
+| Party Outstanding       | As-of date         | Search party; opening, invoiced, received, outstanding and credit limit |
+| Party Ledger            | From / to + party  | Opening balance, invoice debits, receipt/payment credits and running balance |
+| Stock                   | From / to          | Search product; opening stock, stock in, stock out, closing stock and low-stock flag |
+| Production              | From / to          | Search batch, product or notes; batches, finished KG, raw material, wastage, cost and yield |
+| Staff                   | From / to          | Search name, role or phone; salary, bonus, advance, payment, deduction, recovery and remaining payable |
+| Loans                   | From / to          | Search description/reference; loan receipts, repayments, loan interest and net |
+
+Every report returns the same envelope:
+
+```json
+{
+  "report": {
+    "key": "daily-sales",
+    "title": "Daily Sales Report",
+    "description": "...",
+    "range": { "fromKey": "2026-10-27", "toKey": "2026-10-27", "label": "27 Oct 2026", "days": 1 },
+    "filters": { "search": "" },
+    "summary": { "...": "report-specific totals" },
+    "rows": [],
+    "extra": { "...": "optional secondary table" },
+    "notes": []
+  }
+}
+```
+
+Report rules:
+
+- Reports refuse dates in the future and ranges longer than 366 days; `from` cannot be after `to`.
+- Daily, monthly and range sales use billed amounts. Paid and due are shown separately, so a
+  credit invoice is never presented as cash received.
+- The cash book report starts from the configured cash opening date and lists each day with its
+  opening, movement and closing balance. Credit sales and unpaid dues never appear.
+- Party outstanding is an as-of balance (opening + invoices − invoice receipts − party payments)
+  and party ledger opening balances are calculated from everything dated before the range.
+- Stock opening is the sum of stock movements before the range, in/out are the movements inside
+  the range, and closing is the current computed balance; low stock uses the business threshold.
+- Staff range columns count entries in the period while **remaining payable** is the all-time
+  ledger balance.
+- Loan receipts, repayments and loan interest are reported separately and are never added to sales.
+
+### Print, PDF and CSV
+
+**Print / PDF** opens the report preview, where **Print** sends the A4 landscape sheet to the
+browser and **Download PDF** saves the same content with the business header, applied filters,
+summary, table, totals, secondary table and notes. **Download CSV** (on the page and in the
+preview) writes a UTF-8 CSV with the same metadata, summary, rows, totals and notes; the file is
+named `report-<key>-<date>.csv` and the PDF `report-<key>-<date>.pdf`.
 
 ## API endpoints
 
@@ -969,6 +1120,8 @@ is the current month, with the entry count and month name).
 | GET    | `/api/staff/:id`   | Yes  | Staff details, totals and full salary ledger |
 | PUT    | `/api/staff/:id`   | Yes  | Update staff details or status              |
 | POST   | `/api/staff/:id/transactions` | Yes | Record a salary, bonus, advance, payment, deduction or recovery entry |
+| GET    | `/api/dashboard`   | Yes  | Business dashboard for a range (`range=today\|week\|month\|custom`, plus `from`/`to`) |
+| GET    | `/api/reports/:report` | Yes | Run one of the twelve reports (`from`, `to`, `date`, `month`, `asOf`, `party`, `account`, `category`, `search` as applicable) |
 
 Protected routes expect `Authorization: Bearer <token>`. Products are never deleted; use
 `PUT /api/products/:id` with `{ "active": false }` to retire one.
@@ -1121,6 +1274,25 @@ movement fails the entry is deleted.
 `todayPayments` (`total`, `cash`, `bank`, `count`), `monthlySalaryExpense`,
 `monthlySalaryCount`, `salaryMonth` and `salaryMonthLabel`.
 
+`GET /api/dashboard?range=today|week|month|custom` returns `{ dashboard }`. Custom ranges also
+require `from` and `to` (`YYYY-MM-DD`), cannot include future dates and cannot exceed 366 days.
+The response contains `generatedAt`, the resolved `range`, eight `cards`, and the `sales`
+(with chart `series`), `monthly` (current, previous and change), `expenses`, `cashFlow`
+(with `components`), `receivables`, `production`, `stock` and `notes` sections. All totals are
+computed with MongoDB aggregation over the recorded collections; no transaction list is sent to
+the browser. If the custom range starts before the configured cash opening date, cash-flow
+movement starts at the opening date so it stays consistent with cash in hand.
+
+`GET /api/reports/:report` returns `{ report }`, where `:report` is one of `daily-sales`,
+`monthly-sales`, `sales-range`, `expenses`, `cash-book`, `bank`, `party-outstanding`,
+`party-ledger`, `stock`, `production`, `staff` or `loan`. Date parameters are `date`
+(`daily-sales`), `month` (`YYYY-MM`, `monthly-sales`), `asOf` (`party-outstanding`) or `from`
+and `to` (all range reports; default is the current month through today). `party-ledger`
+requires `party`; `bank` accepts `account`; `expenses` accepts `category`; searches use
+`search` where the report supports it. Every response includes `range`, `filters`, `summary`,
+`rows`, optional `extra` and `notes`. Reports never expose loan amounts as sales or unpaid
+invoice dues as cash.
+
 ## What is included in this release
 
 - Working MERN application with separate frontend and backend
@@ -1128,7 +1300,9 @@ movement fails the entry is deleted.
 - Single-user authentication: bcrypt hashing, JWT, protected routes, logout
 - First-time setup flow for the owner account
 - Responsive sidebar/header layout with all 15 navigation entries
-- Dashboard with real today's and monthly sales figures, Muri stock, total party receivable, combined bank balance, production metrics and staff payments
+- Business dashboard calculated with MongoDB aggregation from real transactions: Today, This Week, This Month and Custom ranges, with eight cards, a daily sales chart, monthly sales comparison, expense and cash-flow breakdowns, receivables, production, stock and low-stock warning
+- Dashboard accounting that keeps sales, collections, expenses, cash, bank, loans and receivables separate: loans never count as sales, unpaid credit invoices never count as cash received and party payments never count as new sales
+- Report centre with twelve reports (daily sales, monthly sales, date-range sales, expenses, cash book, bank, party outstanding, party ledger, stock, production, staff and loan), each with date filtering, search where useful, an A4 preview, browser printing, PDF download and CSV export
 - Business settings saved to MongoDB, including receipt/invoice footers, Muri rates, bag weight
   and low-stock threshold
 - Product master with search, add, edit and activate/deactivate; Muri is seeded on first start
@@ -1173,19 +1347,21 @@ movement fails the entry is deleted.
 - One monthly salary entry per staff member, defaulting to the monthly salary, with duplicate and future-month rejection
 - Cash and bank staff payments that reduce the cash book or the selected bank account through a `staff-payment` outflow, with rollback on failure
 - Dashboard staff cards for today's staff payments and the monthly salary expense
-- "Coming Soon" placeholders for all future modules
+- "Coming Soon" placeholder for the loan module, which is the only module not implemented yet
 - Server-side validation, consistent error responses, loading and empty states, toasts
 
 ## What is intentionally not included yet
 
-Loans and reports are not implemented yet. Raw-material inventory is not implemented:
+Reports are implemented. A dedicated loan module is not: the bank ledger has loan receipt and
+loan repayment types, and cash expenses in the Loan Interest category feed the Loan payments row,
+but there is no loan account, amortisation or outstanding tracking, so the Loan report only lists
+recorded loan receipts and repayments and the dashboard shows loan outstanding as not tracked.
+Raw-material inventory is not implemented:
 production stores the raw material quantity on the record, but there is no raw-material stock
 balance or deduction and none is simulated. Bank accounts are tracked, but
 there is no cheque management, reconciliation against bank statements or automatic import.
-The cash book still tracks the single cash account separately from the bank accounts. A separate
-loan module is not included: the bank ledger has loan receipt and loan repayment types, and cash
-expenses in the Loan Interest category feed the Loan payments row, but there is no loan account,
-amortisation or outstanding tracking. Staff salary, advances and payments are recorded in the
+The cash book still tracks the single cash account separately from the bank accounts. Staff
+salary, advances and payments are recorded in the
 staff module; there is no attendance, leave, overtime or payslip generation. WhatsApp
 integration is limited to click-to-chat payment reminders; no paid WhatsApp Business API or
 automatic server-side sending is used. No fake invoices, stock,
@@ -1216,8 +1392,17 @@ transactions or accounting calculations are generated by this release.
   payments write a `staff-payment` bank outflow.
 - Payment reminders open `https://wa.me/...` in a new tab. The message is generated in the
   browser and nothing is sent until the user presses Send in WhatsApp.
-- Receipt and invoice PDFs use `Rs.` instead of `₹` because the built-in PDF fonts do not
-  include the rupee glyph. On-screen and printed documents show `₹`.
+- Receipt, invoice, report and production PDFs use `Rs.` instead of `₹` because the built-in PDF
+  fonts do not include the rupee glyph. On-screen and printed documents show `₹`.
+- Dashboard and report totals are computed in MongoDB with aggregation pipelines and
+  `$dateToString` buckets; the browser receives computed figures, not whole transaction lists.
+- Dashboard cards mix as-of balances and range figures on purpose. Stock, bank and receivable
+  balances are current, cash is as of the selected range end date, and sales, expenses,
+  production and cash flow cover the selected range. A cash range that starts before the
+  configured cash opening date begins at the opening date.
+- Sales are accrual-based: retail bill amounts plus wholesale invoice totals, including credit.
+  Collections are only recorded party payments and cash receipts. Unpaid invoice dues stay in
+  receivables, and loan receipts stay in the bank/cash ledger, so no amount is counted twice.
 - The interface is English-only and designed desktop-first, with a responsive mobile drawer.
 - The frontend dev server proxies `/api` to `http://localhost:5000`. If you change `PORT`,
   update `frontend/vite.config.js` (or set `VITE_API_URL`).
