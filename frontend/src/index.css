@@ -1,0 +1,119 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+
+  --color-cream-50: #faf8f3;
+  --color-cream-100: #f4eee3;
+  --color-cream-200: #e8dfd0;
+  --color-cream-300: #d8cab4;
+
+  --color-ink-400: #9a8a75;
+  --color-ink-500: #7c6a55;
+  --color-ink-700: #4a3b2b;
+  --color-ink-900: #2a2118;
+
+  --color-brand-50: #fdf5e9;
+  --color-brand-100: #fbe8ce;
+  --color-brand-200: #f5d1a1;
+  --color-brand-500: #c2711c;
+  --color-brand-600: #a85a10;
+  --color-brand-700: #8a480c;
+
+  --color-sidebar-700: #463728;
+  --color-sidebar-800: #372b1f;
+  --color-sidebar-900: #2b2117;
+  --color-sidebar-950: #221a12;
+  --color-sidebar-text: #f2e9db;
+  --color-sidebar-muted: #b9a68e;
+}
+
+@layer base {
+  html {
+    @apply antialiased;
+  }
+
+  body {
+    @apply min-h-screen bg-cream-50 text-ink-900;
+    background-image: radial-gradient(circle at 100% 0%, #fffdf8 0%, transparent 45%);
+    font-family: var(--font-sans);
+  }
+
+  #root {
+    @apply min-h-screen;
+  }
+
+  ::selection {
+    @apply bg-brand-200 text-ink-900;
+  }
+}
+
+@layer components {
+  .card {
+    @apply rounded-xl border border-cream-200 bg-white shadow-sm;
+  }
+
+  .field-label {
+    @apply mb-1.5 block text-sm font-medium text-ink-700;
+  }
+
+  .field-input {
+    @apply w-full rounded-lg border border-cream-300 bg-white px-3.5 py-2.5 text-sm text-ink-900 shadow-xs outline-none transition-colors placeholder:text-ink-400 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 disabled:cursor-not-allowed disabled:bg-cream-100 disabled:text-ink-500;
+  }
+
+  .field-input-error {
+    @apply border-red-400 focus:border-red-500 focus:ring-red-500/20;
+  }
+
+  .btn-primary,
+  .btn-secondary,
+  .btn-danger {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60;
+  }
+
+  .btn-primary {
+    @apply bg-brand-600 text-white shadow-sm hover:bg-brand-700 focus-visible:ring-brand-500/40;
+  }
+
+  .btn-secondary {
+    @apply border border-cream-300 bg-white text-ink-700 hover:bg-cream-100 focus-visible:ring-brand-500/40;
+  }
+
+  .btn-danger {
+    @apply bg-red-600 text-white shadow-sm hover:bg-red-700 focus-visible:ring-red-500/40;
+  }
+
+  .pill {
+    @apply inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold;
+  }
+}
+
+.sidebar-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: rgb(255 255 255 / 0.16) transparent;
+}
+
+.sidebar-scroll::-webkit-scrollbar {
+  width: 6px;
+}
+
+.sidebar-scroll::-webkit-scrollbar-thumb {
+  background-color: rgb(255 255 255 / 0.16);
+  border-radius: 9999px;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.spinner {
+  animation: spin 0.7s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spinner {
+    animation-duration: 1.6s;
+  }
+}
