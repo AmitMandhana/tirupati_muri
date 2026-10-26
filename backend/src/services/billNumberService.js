@@ -7,6 +7,7 @@ const EXPENSE_COUNTER_ID = 'expense';
 const CASH_ADJUSTMENT_COUNTER_ID = 'cashAdjustment';
 const BANK_TRANSACTION_COUNTER_ID = 'bankTransaction';
 const BANK_TRANSFER_COUNTER_ID = 'bankTransfer';
+const PRODUCTION_COUNTER_ID = 'production';
 
 export const formatRetailBillNumber = (sequence) => `R-${String(sequence).padStart(6, '0')}`;
 
@@ -94,4 +95,16 @@ export const getNextBankTransferNumber = async () => {
   ).lean();
 
   return formatBankTransferNumber(counter.seq);
+};
+
+export const formatProductionNumber = (sequence) => `PROD-${String(sequence).padStart(6, '0')}`;
+
+export const getNextProductionNumber = async () => {
+  const counter = await Counter.findOneAndUpdate(
+    { _id: PRODUCTION_COUNTER_ID },
+    { $inc: { seq: 1 } },
+    { returnDocument: 'after', upsert: true, setDefaultsOnInsert: true },
+  ).lean();
+
+  return formatProductionNumber(counter.seq);
 };

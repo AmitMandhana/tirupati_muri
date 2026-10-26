@@ -317,6 +317,23 @@ export const reserveWholesaleStock = async (product, quantity) =>
     referenceType: 'sale',
   });
 
+export const addProductionStock = async ({
+  product,
+  quantity,
+  productionNumber,
+  date,
+  notes = '',
+}) =>
+  applySignedMovement({
+    product,
+    type: 'production',
+    delta: roundQuantity(quantity),
+    referenceId: productionNumber,
+    referenceType: 'production',
+    notes,
+    date,
+  });
+
 export const attachSaleReference = async (transactionId, billNumber) => {
   await StockTransaction.updateOne(
     { _id: transactionId },

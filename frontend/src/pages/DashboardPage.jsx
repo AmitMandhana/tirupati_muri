@@ -9,9 +9,15 @@ import { useBusinessSettings } from '../hooks/useBusinessSettings';
 import { getBankAccountsApi } from '../services/bankAccountService';
 import { getCashBookSummaryApi } from '../services/cashBookService';
 import { getReceivablesApi } from '../services/partyService';
+import { getProductionSummaryApi } from '../services/productionService';
 import { getSalesSummaryApi } from '../services/saleService';
 import { getStockOverviewApi } from '../services/stockService';
-import { formatINR, formatLongDate, formatQuantity } from '../utils/format';
+import {
+  formatINR,
+  formatLongDate,
+  formatQuantity,
+  formatReceiptDate,
+} from '../utils/format';
 
 const quickLinks = [
   { to: '/retail-billing', label: 'Retail Billing', icon: 'billing', description: 'Counter sales' },
@@ -24,6 +30,12 @@ const quickLinks = [
   },
   { to: '/expenses', label: 'Expenses', icon: 'expenses', description: 'Costs & categories' },
   { to: '/stock', label: 'Stock', icon: 'stock', description: 'Balance & ledger' },
+  {
+    to: '/production',
+    label: 'Production',
+    icon: 'production',
+    description: 'Batches & yield',
+  },
   { to: '/parties', label: 'Parties', icon: 'parties', description: 'Accounts & ledgers' },
   {
     to: '/receivables',
@@ -54,6 +66,8 @@ const DashboardPage = () => {
   const [cashFailed, setCashFailed] = useState(false);
   const [bank, setBank] = useState(null);
   const [bankFailed, setBankFailed] = useState(false);
+  const [production, setProduction] = useState(null);
+  const [productionFailed, setProductionFailed] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
@@ -169,6 +183,27 @@ const DashboardPage = () => {
     };
   }, []);
 
+  useEffect(() => {
+    let isMounted = true;
+
+    getProductionSummaryApi()
+      .then((data) => {
+        if (isMounted) {
+          setProduction(data.summary ?? null);
+          setProductionFailed(false);
+        }
+      })
+      .catch(() => {
+        if (isMounted) {
+          setProductionFailed(true);
+        }
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
   const unit = stock?.unit ?? 'KG';
   const stockHint = stockFailed
     ? 'Stock unavailable'
@@ -225,6 +260,55 @@ const DashboardPage = () => {
         : `${bank.activeCount} of ${bank.accountCount} ${
             bank.accountCount === 1 ? 'account' : 'accounts'
           } active`;
+
+  const productionBatchLabel = (count) => `${count} ${count === 1 ? 'batch' : 'batches'}`;
+  const productionTodayHint = productionFailed
+    ? 'Production summary unavailable'
+    : !production
+      ? "Loading today's production..."
+      : production.today.count > 0
+        ? `${productionBatchLabel(production.today.count)} today`
+        : 'No production today';
+  const productionMonthHint = productionFailed
+    ? 'Production summary unavailable'
+    : !production
+      ? "Loading this month's production..."
+      : production.month.count > 0
+        ? `${productionBatchLabel(production.month.count)} this month`
+        : 'No production this month';
+  const currentYieldHint = productionFailed
+    ? 'Production summary unavailable'
+    : !production
+      ? 'Loading current yield...'
+      : production.currentYieldPercent === null
+        ? 'No production recorded yet'
+        : `${production.latestProduction.productionNumber} · ${formatReceiptDate(
+            production.latestProduction.productionDate,
+          )}`;
+
+  const productionStats = [
+    {
+      title: "Today's Production",
+      icon: 'production',
+      hint: productionTodayHint,
+      value: production ? production.today.finishedKg : null,
+      formatValue: (value) => `${formatQuantity(value)} KG`,
+    },
+    {
+      title: 'Monthly Production',
+      icon: 'reports',
+      hint: productionMonthHint,
+      value: production ? production.month.finishedKg : null,
+      formatValue: (value) => `${formatQuantity(value)} KG`,
+    },
+    {
+      title: 'Current Production Yield',
+      icon: 'reports',
+      hint: currentYieldHint,
+      value: production ? production.currentYieldPercent : null,
+      formatValue: (value) => `${Number(value).toFixed(2)}%`,
+    },
+  ];
 
   const todayStats = [
     {
@@ -298,10 +382,10 @@ const DashboardPage = () => {
             <p className="mt-1 text-sm font-medium text-ink-500">Business Management System</p>
             <p className="mt-4 max-w-2xl text-sm leading-relaxed text-ink-500">
               Welcome back{firstName ? `, ${firstName}` : ''}. Retail billing, wholesale invoicing,
-              stock, party credit, expenses, the daily cash book and bank accounts are live.
-              Today&apos;s sales, expenses, cash in hand, bank balance, Muri stock and party
-              receivable below come from recorded bills, stock movements, invoices, receipts,
-              payments and bank transactions.
+              stock, production, party credit, expenses, the daily cash book and bank accounts are
+              live. Today&apos;s sales, expenses, cash in hand, bank balance, production, Muri
+              stock and party receivable below come from recorded bills, stock movements,
+              production batches, invoices, receipts, payments and bank transactions.
             </p>
           </div>
           <div className="hidden shrink-0 sm:block">
@@ -355,6 +439,18 @@ const DashboardPage = () => {
         </div>
       </section>
 
+      <section>
+        <SectionHeading
+          title="Production"
+          description="Finished Muri and yield from recorded production batches."
+        />
+        <div className="grid gap-3 sm:grid-cols-3">
+          {productionStats.map((stat) => (
+            <StatCard key={stat.title} {...stat} />
+          ))}
+        </div>
+      </section>
+
       <div className="grid gap-4 lg:grid-cols-3">
         <section className="card p-6 lg:col-span-2">
           <h2 className="text-base font-semibold text-ink-900">Quick access</h2>
@@ -387,14 +483,15 @@ const DashboardPage = () => {
 
         <section className="card border-brand-100 bg-brand-50/50 p-6">
           <span className="pill border border-brand-200 bg-white uppercase tracking-[0.12em] text-brand-700">
-            Billing, banking &amp; cash live
+            Billing, production &amp; finance live
           </span>
           <h2 className="mt-4 text-base font-semibold text-ink-900">What is included now</h2>
           <p className="mt-2 text-sm leading-relaxed text-ink-500">
             Sign-in, business settings, the product catalogue, retail billing, wholesale
-            invoicing, stock tracking, party ledgers, credit limits, payment receipts,
-            receivables, expense management, the daily cash book and bank account management with
-            transfers are ready. Production, staff and loan management will be added step by step.
+            invoicing, stock tracking, production entry with yield calculation, party ledgers,
+            credit limits, payment receipts, receivables, expense management, the daily cash book
+            and bank account management with transfers are ready. Staff and loan management will
+            be added step by step.
           </p>
           <Link
             to="/settings"

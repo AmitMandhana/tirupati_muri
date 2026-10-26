@@ -5,9 +5,11 @@ includes authentication, the application shell, the dashboard, business settings
 master, fast retail billing with printable thermal receipts, a ledger-based Muri stock module,
 wholesale invoicing with A4 invoices, complete party ledgers with credit limits, payment
 receipts, accounts receivable and WhatsApp payment reminders, expense management, a daily cash
-book with cash in hand, physical cash counts and adjustments, and multi-account bank management
-with transaction ledgers and account-to-account transfers. Production, staff, loans and reports
-are represented by clearly marked "Coming Soon" pages and will be added in later phases.
+book with cash in hand, physical cash counts and adjustments, multi-account bank management
+with transaction ledgers and account-to-account transfers, and Muri production entries with
+yield and per-KG ratio calculation, finished-stock integration and printable production
+history. Staff, loans and reports are represented by clearly marked "Coming Soon" pages and
+will be added in later phases.
 
 ## Tech stack
 
@@ -24,22 +26,22 @@ murii/
 │   ├── .env.example
 │   └── src/
 │       ├── config/        # environment loading and database connection
-│       ├── controllers/   # auth, settings, product, sale, stock, party, payment, invoice, expense, cash book and bank account handlers
+│       ├── controllers/   # auth, settings, product, sale, stock, party, payment, invoice, expense, cash book, bank account and production handlers
 │       ├── middleware/    # JWT auth, error handling
-│       ├── models/        # User, BusinessSettings, Product, Sale, Counter, ProductStock, StockTransaction, Party, PartyPayment, WholesaleInvoice, ExpenseCategory, Expense, CashAdjustment, CashCount, BankAccount, BankTransaction
-│       ├── routes/        # /api/auth, /api/settings, /api/products, /api/sales, /api/stock, /api/parties, /api/invoices, /api/expenses, /api/cash-book, /api/bank-accounts
-│       ├── services/      # token signing, product and category seeds, sales, wholesale invoices, party ledger, stock, expenses, cash book, bank accounts, bill numbers
+│       ├── models/        # User, BusinessSettings, Product, Sale, Counter, ProductStock, StockTransaction, Party, PartyPayment, WholesaleInvoice, ExpenseCategory, Expense, CashAdjustment, CashCount, BankAccount, BankTransaction, Production
+│       ├── routes/        # /api/auth, /api/settings, /api/products, /api/sales, /api/stock, /api/parties, /api/invoices, /api/expenses, /api/cash-book, /api/bank-accounts, /api/production
+│       ├── services/      # token signing, product and category seeds, sales, wholesale invoices, party ledger, stock, expenses, cash book, bank accounts, production, bill numbers
 │       ├── utils/         # async wrapper, HTTP errors, validators, stock types, local-date helpers
 │       ├── app.js         # Express app
 │       └── server.js      # startup entry point
 └── frontend/
     └── src/
-        ├── components/    # layout pieces, form fields, dialogs (expense, opening cash, physical cash, bank account, bank transaction, bank transfer), receipt, invoice sheet, payment dialog, icons
+        ├── components/    # layout pieces, form fields, dialogs (expense, opening cash, physical cash, bank account, bank transaction, bank transfer, production), receipt, invoice sheet, production report, payment dialog, icons
         ├── hooks/         # authentication and business-settings contexts
         ├── layouts/       # sidebar + header application shell
-        ├── pages/         # login, dashboard, settings, products, retail billing, stock, wholesale, parties, party ledger, receivables, expenses, cash book, bank accounts, bank account ledger, placeholders
+        ├── pages/         # login, dashboard, settings, products, retail billing, stock, wholesale, parties, party ledger, receivables, expenses, cash book, bank accounts, bank account ledger, production, placeholders
         ├── services/      # Axios instance and API calls
-        └── utils/         # currency, dates, validation, billing, stock, invoice, WhatsApp reminder helpers and PDFs
+        └── utils/         # currency, dates, validation, billing, stock, invoice, production, WhatsApp reminder helpers and PDFs
 ```
 
 ## Prerequisites
@@ -301,13 +303,14 @@ never stored separately.
 The **Muri Stock** card on the dashboard shows the current balance and bag count from the same
 stock service, and the dashboard warning links to the Stock page.
 
-### Transaction types and future modules
+### Transaction types and production
 
-The ledger already understands Opening Stock, Production, Retail Sale, Wholesale Sale, Wastage,
+The ledger understands Opening Stock, Production, Retail Sale, Wholesale Sale, Wastage,
 Adjustment and Purchase/Stock Addition. This release writes opening stock, purchases, wastage,
-adjustments, retail sales and wholesale sales. **Production is not implemented yet**; when that
-module is added it will call the same `applySignedMovement` service so the balance and ledger
-stay consistent.
+adjustments, retail sales, wholesale sales and production. Production uses the same
+`applySignedMovement` service as every other movement, so the balance and ledger stay
+consistent. Raw material is not a stock item in this release: it is kept on the production
+record only, so no stock is created or deducted for it.
 
 ## 10. Wholesale invoices
 
@@ -746,6 +749,81 @@ source record and the bank ledger never disagree.
 The **Bank Balance** card shows the combined balance of every bank account and how many accounts
 are active, recalculated from the bank ledgers on every request.
 
+## 15. Muri production and yield calculation
+
+Open **Production** from the Operations section. Every saved production record adds the finished
+Muri quantity to stock once and keeps the raw material quantity on the record only.
+
+### Recording production
+
+1. Click **Record production**.
+2. Choose the **production date** (today is prefilled; future dates are rejected).
+3. Optionally enter the **production cost** for the batch.
+4. Enter the **raw material quantity** in KG processed in this batch.
+5. Enter the **finished muri quantity** in KG. This is the amount added to Muri stock.
+6. Optionally enter the **wastage / loss** in KG and **notes** (up to 500 characters).
+7. Check the live ratio panel, then click **Save production**.
+
+| Field              | Rule                                                                  |
+| ------------------ | --------------------------------------------------------------------- |
+| Production date    | Required; cannot be in the future                                     |
+| Raw material (KG)  | Required; greater than zero                                           |
+| Finished muri (KG) | Required; greater than zero                                           |
+| Wastage / loss     | Optional; zero or more                                                |
+| Production cost    | Optional; zero or more                                                |
+| Notes              | Optional; up to 500 characters                                        |
+
+Production numbers are sequential and assigned by the server: `PROD-000001`, `PROD-000002`, and
+so on. Validation runs before the number is allocated, so a rejected entry does not consume a
+number. The record is linked to the Muri product.
+
+### Ratio calculation
+
+Both ratios are calculated from the stored quantities and shown on the form, in the history and
+in the PDF — they are never entered or stored separately:
+
+- **Yield %** = finished muri ÷ raw material × 100
+- **Raw material per KG** = raw material ÷ finished muri
+
+For example, raw material **100 KG** and finished muri **250 KG** give a yield of **250%** and
+**0.40 KG** of raw material per KG of muri.
+
+### Stock integration and double counting
+
+Saving a production record writes one **Production** stock movement for the finished quantity,
+referencing the `PROD-` number, for example `Raw material 100 KG → finished 250 KG`. The Muri
+stock balance therefore increases by exactly the finished quantity, and the movement appears in
+the Stock ledger like every other transaction.
+
+Raw material is **not** deducted from stock and no raw-material stock is created, because raw
+material inventory is not part of this release. The quantity is kept on the production record
+as information, so the same batch cannot be counted twice. If the stock movement fails, the
+production record is deleted, so the record and the stock ledger never disagree.
+
+### Production history
+
+The page lists **Date**, **Production number**, **Raw material**, **Finished Muri**,
+**Wastage** and **Yield** (with raw material per KG below it), newest first and limited to 200
+rows. **Search** matches the production number or notes, and the **From** / **To** date filters
+are inclusive. The four summary cards — **Finished Muri**, **Raw material**, **Wastage / loss**
+and **Yield** — always reflect the current filters.
+
+**Print** opens an A4 production-history preview and **Download PDF** saves the same report.
+Both include the applied filters, every matching row and a totals row.
+
+### Dashboard
+
+The **Production** section shows **Today's Production** and **Monthly Production** in KG (from
+the recorded production dates) and **Current Production Yield**, which is the yield of the most
+recent batch. Its hint names that batch and its date.
+
+### Worked example
+
+1. Enter raw material **100 KG** and finished muri **250 KG**. The form shows yield **250%** and
+   **0.40 KG** raw per KG.
+2. Save. The record becomes **PROD-000001** and Muri stock increases by **250 KG**.
+3. The Stock ledger shows a **Production** row of **+250 KG** referencing **PROD-000001**.
+
 ## API endpoints
 
 | Method | Path               | Auth | Purpose                              |
@@ -791,6 +869,9 @@ are active, recalculated from the bank ledgers on every request.
 | PUT    | `/api/bank-accounts/:id` | Yes | Update account details, opening balance or status |
 | POST   | `/api/bank-accounts/:id/transactions` | Yes | Record a manual bank transaction |
 | POST   | `/api/bank-accounts/transfer` | Yes | Transfer money between two accounts |
+| GET    | `/api/production`  | Yes  | List production batches with a filtered summary (`search`, `from`, `to`, `limit`) |
+| POST   | `/api/production`  | Yes  | Record a production batch and add the finished Muri to stock |
+| GET    | `/api/production/summary` | Yes | Today's and this month's production plus the current yield |
 
 Protected routes expect `Authorization: Bearer <token>`. Products are never deleted; use
 `PUT /api/products/:id` with `{ "active": false }` to retire one.
@@ -800,7 +881,7 @@ same product returns `409`; use an adjustment instead. `POST /api/stock/movement
 `{ product, type, quantity, notes? }` where `type` is `purchase`, `wastage` or `adjustment`.
 Purchase and wastage quantities must be positive (wastage is stored as a negative movement);
 adjustments are signed and cannot take the balance below zero. Production movements are
-rejected until that module is built; wholesale deductions are written only by
+written only by `POST /api/production`; wholesale deductions are written only by
 `POST /api/invoices`.
 
 `POST /api/sales` accepts `{ product, inputMode, amount | quantity, rate?, paymentMethod,
@@ -902,6 +983,23 @@ transactionDate?, notes? }`. The accounts must be different and active. The serv
 returns `{ message, transfer }` with the number, amount, date and both account labels. If the
 second entry fails, the first is removed, so total business money is unchanged.
 
+`POST /api/production` accepts `{ productionDate, rawMaterialKg, finishedKg, wastageKg?,
+productionCost?, notes? }`. `productionDate` is `YYYY-MM-DD` and cannot be in the future;
+`rawMaterialKg` and `finishedKg` must be greater than zero; `wastageKg` and `productionCost`
+default to `0`. The server links the record to the Muri product, assigns the
+`PROD-000001`-style number after validation, adds the finished quantity to stock and returns
+`{ message, production, stock }`. Each production view includes the derived `yieldPercent`
+and `rawMaterialPerKg`; raw material is never posted to stock. If the stock movement fails,
+the production record is deleted.
+
+`GET /api/production` returns `{ productions, summary }` with the same `search`, `from` and
+`to` filters as the other history endpoints, inclusive dates, newest first and at most 200
+rows. `summary` contains `count`, `finishedKg`, `rawMaterialKg`, `wastageKg`,
+`productionCost` and the derived `yieldPercent` for the filtered rows.
+`GET /api/production/summary` returns `{ summary }` with `today`, `month` (same shape),
+`currentYieldPercent` from the latest batch and `latestProduction`
+(`productionNumber`, `productionDate`).
+
 ## What is included in this release
 
 - Working MERN application with separate frontend and backend
@@ -909,7 +1007,7 @@ second entry fails, the first is removed, so total business money is unchanged.
 - Single-user authentication: bcrypt hashing, JWT, protected routes, logout
 - First-time setup flow for the owner account
 - Responsive sidebar/header layout with all 15 navigation entries
-- Dashboard with real today's and monthly sales figures, Muri stock, total party receivable and combined bank balance
+- Dashboard with real today's and monthly sales figures, Muri stock, total party receivable, combined bank balance and production metrics
 - Business settings saved to MongoDB, including receipt/invoice footers, Muri rates, bag weight
   and low-stock threshold
 - Product master with search, add, edit and activate/deactivate; Muri is seeded on first start
@@ -943,19 +1041,25 @@ second entry fails, the first is removed, so total business money is unchanged.
 - Account-to-account transfers (`TRF-000001`) that move money without changing the total business balance
 - Automatic bank entries from wholesale UPI/bank receipts, party UPI/bank payments and UPI/bank expenses, with rollback on failure
 - Bank Accounts page with account balances and today's inflow/outflow, plus a dashboard Bank Balance card
+- Muri production entries with server-assigned `PROD-000001` numbers, date, raw material, finished quantity, wastage, production cost and notes
+- Yield % and raw material per KG calculated from the stored quantities and shown on the entry form, history list and PDF
+- Finished Muri added to stock exactly once per production record through a referenced ledger entry, with the record rolled back if the movement fails; raw material stays on the record only
+- Production history with search, inclusive date filters, filtered totals, A4 print preview and PDF download
+- Dashboard production cards for today's production, monthly production and the current batch yield
 - "Coming Soon" placeholders for all future modules
 - Server-side validation, consistent error responses, loading and empty states, toasts
 
 ## What is intentionally not included yet
 
-Production, staff, loans and reports are not implemented yet. Bank accounts are tracked, but
+Staff, loans and reports are not implemented yet. Raw-material inventory is not implemented:
+production stores the raw material quantity on the record, but there is no raw-material stock
+balance or deduction and none is simulated. Bank accounts are tracked, but
 there is no cheque management, reconciliation against bank statements or automatic import.
 The cash book still tracks the single cash account separately from the bank accounts. Salary and
 Loan Interest expenses feed the Staff payments and Loan payments rows, and the bank ledger has
 loan receipt and loan repayment types, but there is no separate staff or loan module. WhatsApp
 integration is limited to click-to-chat payment reminders; no paid WhatsApp Business API or
-automatic server-side sending is used. Production stock deductions are not implemented; the
-transaction type exists in the stock architecture for later use. No fake invoices, stock,
+automatic server-side sending is used. No fake invoices, stock,
 transactions or accounting calculations are generated by this release.
 
 ## Notes
@@ -971,6 +1075,9 @@ transactions or accounting calculations are generated by this release.
 - Bank balances are derived the same way (`opening balance + inflows − outflows`) and are never
   stored. Account numbers are stored for uniqueness but only masked values leave the API, and a
   transfer is always a paired outflow and inflow, so it cannot change total business money.
+- Production yield and raw material per KG are calculated from the stored quantities on every
+  read and are never stored. Each production record writes exactly one Production stock movement
+  for the finished Muri; raw material is not part of the stock balance.
 - Payment reminders open `https://wa.me/...` in a new tab. The message is generated in the
   browser and nothing is sent until the user presses Send in WhatsApp.
 - Receipt and invoice PDFs use `Rs.` instead of `₹` because the built-in PDF fonts do not
