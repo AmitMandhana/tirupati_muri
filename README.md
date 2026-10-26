@@ -3,10 +3,11 @@
 A cloud-based business management web application for a puffed rice (muri) mill. This release
 includes authentication, the application shell, the dashboard, business settings, the product
 master, fast retail billing with printable thermal receipts, a ledger-based Muri stock module,
-wholesale invoicing with A4 invoices, and complete party ledgers with credit limits, payment
-receipts, accounts receivable and WhatsApp payment reminders. Production, staff, expenses,
-cash book, bank accounts, loans and reports are represented by clearly marked "Coming Soon"
-pages and will be added in later phases.
+wholesale invoicing with A4 invoices, complete party ledgers with credit limits, payment
+receipts, accounts receivable and WhatsApp payment reminders, expense management, and a daily
+cash book with cash in hand, physical cash counts and adjustments. Production, staff, bank
+accounts, loans and reports are represented by clearly marked "Coming Soon" pages and will be
+added in later phases.
 
 ## Tech stack
 
@@ -23,20 +24,20 @@ murii/
 │   ├── .env.example
 │   └── src/
 │       ├── config/        # environment loading and database connection
-│       ├── controllers/   # auth, settings, product, sale, stock, party, payment and invoice handlers
+│       ├── controllers/   # auth, settings, product, sale, stock, party, payment, invoice, expense and cash book handlers
 │       ├── middleware/    # JWT auth, error handling
-│       ├── models/        # User, BusinessSettings, Product, Sale, Counter, ProductStock, StockTransaction, Party, PartyPayment, WholesaleInvoice
-│       ├── routes/        # /api/auth, /api/settings, /api/products, /api/sales, /api/stock, /api/parties, /api/invoices
-│       ├── services/      # token signing, product seed, sales, wholesale invoices, party ledger, bill numbers, stock movements
-│       ├── utils/         # async wrapper, HTTP errors, validators, stock types
+│       ├── models/        # User, BusinessSettings, Product, Sale, Counter, ProductStock, StockTransaction, Party, PartyPayment, WholesaleInvoice, ExpenseCategory, Expense, CashAdjustment, CashCount
+│       ├── routes/        # /api/auth, /api/settings, /api/products, /api/sales, /api/stock, /api/parties, /api/invoices, /api/expenses, /api/cash-book
+│       ├── services/      # token signing, product and category seeds, sales, wholesale invoices, party ledger, stock, expenses, cash book, bill numbers
+│       ├── utils/         # async wrapper, HTTP errors, validators, stock types, local-date helpers
 │       ├── app.js         # Express app
 │       └── server.js      # startup entry point
 └── frontend/
     └── src/
-        ├── components/    # layout pieces, form fields, dialogs, receipt, invoice sheet, payment dialog, icons
+        ├── components/    # layout pieces, form fields, dialogs (expense, opening cash, physical cash), receipt, invoice sheet, payment dialog, icons
         ├── hooks/         # authentication and business-settings contexts
         ├── layouts/       # sidebar + header application shell
-        ├── pages/         # login, dashboard, settings, products, retail billing, stock, wholesale, parties, party ledger, receivables, placeholders
+        ├── pages/         # login, dashboard, settings, products, retail billing, stock, wholesale, parties, party ledger, receivables, expenses, cash book, placeholders
         ├── services/      # Axios instance and API calls
         └── utils/         # currency, dates, validation, billing, stock, invoice, WhatsApp reminder helpers and PDFs
 ```
@@ -517,6 +518,128 @@ With 1,000 KG of opening stock and a 500 KG invoice at ₹40:
 4. Try a 10 KG credit invoice for ABC. It is rejected with the credit-limit message, stock and
    invoice numbers are unchanged.
 
+## 12. Expense management
+
+Open **Expenses** from the Finance section. The page records day-to-day mill costs and shows
+**Total expenses**, **Paid from cash**, **Paid from bank** and **Expense entries** for the
+current filters.
+
+### Categories
+
+Eleven categories are seeded on first start, in this order: **Electricity**, **Fuel**,
+**Transport**, **Salary**, **Maintenance**, **Rent**, **Packaging**, **Repairs**,
+**Bank Charges**, **Loan Interest** and **Miscellaneous**. Seeds use insert-only writes, so
+renaming or adding categories later never duplicates or overwrites them.
+
+Custom categories can be added from the category dropdown in the expense dialog (**Add**) or
+with `POST /api/expenses/categories`. Names are trimmed, limited to 60 characters and checked
+case-insensitively; a duplicate returns `409`.
+
+### Recording an expense
+
+| Field           | Notes                                                                |
+| --------------- | -------------------------------------------------------------------- |
+| Expense date    | Required; cannot be in the future                                     |
+| Amount          | Required; greater than zero                                          |
+| Category        | Required; a seeded or custom category                                |
+| Payment method  | **Cash**, **UPI** or **Bank**                                        |
+| Cash/bank account | Derived from the method: cash payments use the cash account, UPI and bank payments the bank account |
+| Description     | Required, up to 200 characters                                       |
+| Notes           | Optional, up to 500 characters                                       |
+
+Expense numbers are sequential and concurrency-safe: `EXP-000001`, `EXP-000002`, and so on.
+The number is allocated only after validation succeeds, so a rejected expense never consumes a
+number. The cash book reads only **cash** expenses; UPI and bank expenses are recorded and
+listed but never reduce cash in hand.
+
+The list can be searched by expense number, description, category or notes and filtered by
+category and an inclusive **From**/**To** date range. It shows the latest 200 matching rows
+while the summary cards cover every expense matching the filters.
+
+## 13. Cash in hand and the daily cash book
+
+Open **Cash Book** from the Finance section. The daily cash book follows one formula, computed
+from stored transactions on every request:
+
+```
+Opening Cash + Cash Sales + Cash Collections + Other Cash Income
+  − Cash Expenses − Cash Payments − Other Cash Outflows
+= Closing Cash
+```
+
+### Opening cash
+
+Set the opening cash once with **Opening cash**: an amount and an **opening date** (today or
+earlier). Opening cash is the cash on hand at the **start** of that date, so cash movements
+before the opening date are excluded rather than mixed into the balance. Opening a date before
+the configured opening date shows zeroes, a notice that opening cash starts later, and a
+disabled physical count. Changing the amount or date recalculates every cash book figure,
+including the dashboard.
+
+### Daily cash view
+
+The page has **Previous day** / **Next day** / **Today** navigation and a date picker. The daily
+view shows the required rows:
+
+| Row                 | Source                                                                 |
+| ------------------- | ---------------------------------------------------------------------- |
+| Opening cash        | Opening balance plus the net cash flow of all earlier days             |
+| Cash sales          | Retail sales paid in cash and the paid portion of cash wholesale invoices |
+| Party collections   | Cash payments received from parties (`PAY-...`)                        |
+| Other income        | Cash count surplus adjustments (`ADJ-...`)                             |
+| Expenses            | Cash operating expenses                                                |
+| Staff payments      | Cash expenses in the **Salary** category                               |
+| Loan payments       | Cash expenses in the **Loan Interest** category                        |
+| Closing cash        | Opening plus cash in, minus cash out                                   |
+
+Each cash expense is counted once: Salary goes to **Staff payments**, Loan Interest to
+**Loan payments**, and every other cash expense to **Expenses**. UPI and bank expenses are
+excluded entirely. **Other cash outflows** holds cash count shortages.
+
+The **Cash transactions** table lists every cash movement for the selected date with reference,
+description, cash in, cash out and running balance. The running balance starts at the opening
+cash and ends at the closing cash.
+
+### Credit sales are not cash
+
+A credit transaction raises sales and receivables but never cash. A ₹20,000 credit invoice
+produces **Sales ₹20,000**, **Cash ₹0** and **Receivable ₹20,000**; it does not appear in the
+cash book. Wholesale invoices with `paymentMethod: cash` contribute only their **paid** amount,
+never the unpaid due.
+
+### Physical cash count
+
+**Physical count** (or **Count again**) compares the expected closing cash with the cash
+actually counted for the selected date. The dialog shows the expected amount, the physical
+amount, the live **Difference**, and a history of the latest count.
+
+- With **Adjust cash book to match** unticked, the count is stored for comparison only.
+- With it ticked, the difference is written as a numbered adjustment (`ADJ-000001`, ...).
+  A surplus becomes **Other cash income**; a shortage becomes **Other cash outflows**.
+- A **reason** is required whenever the cash book is adjusted for a non-zero difference.
+  A matched count creates no adjustment and needs no reason.
+
+A count cannot be recorded for a future date or before the opening date. If creating the
+adjustment fails, the count is rolled back, so the two collections never disagree.
+
+### Worked example
+
+Starting with no recorded cash, then setting opening cash **₹10,000** on today's date:
+
+1. A **₹5,000 cash** retail sale raises closing cash to **₹15,000**.
+2. A **₹2,000 cash** expense (Electricity) lowers it to **₹13,000** — the expected result.
+3. A **₹20,000 credit** invoice is saved. Cash stays at **₹13,000**; sales and receivables
+   rise by ₹20,000.
+4. A **₹100 UPI** expense is recorded. Cash is still **₹13,000**.
+5. A party pays **₹1,000 in cash**. Cash becomes **₹14,000**.
+6. Counting **₹13,900** and adjusting writes `ADJ-000001` for ₹100, closing at **₹13,900**.
+
+### Dashboard
+
+The **Today's Expenses** card shows the total of every expense dated today (with the cash
+portion) and **Cash in Hand** shows today's closing cash from the cash book service. Both are
+derived from actual transactions, never stored totals.
+
 ## API endpoints
 
 | Method | Path               | Auth | Purpose                              |
@@ -548,6 +671,14 @@ With 1,000 KG of opening stock and a 500 KG invoice at ₹40:
 | GET    | `/api/invoices`    | Yes  | List wholesale invoices with a filtered summary (`search`, `from`, `to`, `limit`) |
 | POST   | `/api/invoices`    | Yes  | Create a wholesale invoice and deduct stock |
 | GET    | `/api/invoices/:id`| Yes  | Read one wholesale invoice           |
+| GET    | `/api/expenses/categories` | Yes | List expense categories         |
+| POST   | `/api/expenses/categories` | Yes | Add a custom expense category   |
+| GET    | `/api/expenses`    | Yes  | List expenses and a filtered summary (`search`, `category`, `from`, `to`) |
+| POST   | `/api/expenses`    | Yes  | Record an expense and return its `EXP-` number |
+| GET    | `/api/cash-book`   | Yes  | Daily cash book for one date (`date`, defaults to today) |
+| GET    | `/api/cash-book/summary` | Yes | Today's cash in hand and today's expense totals |
+| PUT    | `/api/cash-book/opening` | Yes | Set the opening cash amount and opening date |
+| POST   | `/api/cash-book/counts` | Yes | Record a physical cash count and optional adjustment |
 
 Protected routes expect `Authorization: Bearer <token>`. Products are never deleted; use
 `PUT /api/products/:id` with `{ "active": false }` to retire one.
@@ -596,6 +727,33 @@ are rejected, and an invoice with an amount due is rejected when it would take t
 outstanding above its credit limit. `GET /api/invoices` returns `{ invoices, summary }`, where
 the summary applies the same search/date filters as the list.
 
+`POST /api/expenses` accepts `{ expenseDate, categoryId? | category, amount, paymentMethod,
+account?, description, notes? }`. `expenseDate` is `YYYY-MM-DD` and cannot be in the future;
+`paymentMethod` is `cash`, `upi` or `bank`, and the account (`cash` for cash, `bank` otherwise)
+is derived on the server when omitted. The category can be an id or an existing category name;
+unknown names are rejected rather than silently created. The server allocates the
+`EXP-000001`-style number after validation and returns `{ message, expense }`.
+`GET /api/expenses` returns `{ expenses, summary }`, where `summary` covers all rows matching
+the filters.
+
+`GET /api/expenses/categories` returns `{ categories }`. `POST /api/expenses/categories`
+accepts `{ name }`, returns `{ message, category }` and responds `409` when the name already
+exists (case-insensitive).
+
+`GET /api/cash-book?date=YYYY-MM-DD` returns the `opening` balance and effective opening, a
+`summary` with cash sales, party collections, other income, expenses, staff payments, loan
+payments, other outflows, total in/out and closing cash, the cash `entries` with a running
+balance, and the `latestCount`. Dates before the opening date return zeroed figures with
+`beforeOpening: true`. `GET /api/cash-book/summary` returns today's cash in hand plus today's
+expense totals (total, cash, bank, count) for the dashboard.
+
+`PUT /api/cash-book/opening` accepts `{ openingCash, openingDate }`; the amount cannot be
+negative and the date cannot be in the future. `POST /api/cash-book/counts` accepts
+`{ date?, physicalCash, adjustCashBook?, reason?, notes? }`; `date` defaults to today. When
+`adjustCashBook` is true and the difference is non-zero, a reason is required and the server
+writes an `ADJ-` adjustment (surplus to other cash income, shortage to other outflows). Counts
+for future or before-opening dates return `400`.
+
 ## What is included in this release
 
 - Working MERN application with separate frontend and backend
@@ -625,24 +783,35 @@ the summary applies the same search/date filters as the list.
 - Atomic wholesale stock deduction with ledger entries referencing the invoice number
 - A4 invoice preview, browser printing and PDF download
 - Invoice history with server-side search, inclusive date filters and filtered sales/received/due summaries
+- Expense management with 11 seeded categories, custom categories, server-assigned `EXP-000001` numbers and cash/bank classification
+- Daily cash book with opening cash, cash sales, party collections, other income, expenses, staff and loan payments, other outflows and closing cash
+- Cash transactions with a running balance and credit sales excluded from cash in hand
+- Physical cash counts comparing expected and physical cash, with reason-required `ADJ-` adjustments for surpluses and shortages
+- Dashboard Today's Expenses and Cash in Hand driven by actual expense and cash book transactions
 - "Coming Soon" placeholders for all future modules
 - Server-side validation, consistent error responses, loading and empty states, toasts
 
 ## What is intentionally not included yet
 
-Production, staff, expenses, the cash book, bank accounts, loans and reports are not
-implemented yet. The Receivables page shows all-time cash and bank receipt totals, but it is
-not a cash book or a bank reconciliation. WhatsApp integration is limited to click-to-chat
-payment reminders; no paid WhatsApp Business API or automatic server-side sending is used.
-Production stock deductions are not implemented; the transaction type exists in the stock
-architecture for later use. No fake invoices, stock, transactions or accounting calculations
-are generated by this release.
+Production, staff, bank accounts, loans and reports are not implemented yet. The cash book
+tracks a single cash account; it is not a bank reconciliation, and there is no multi-account
+or cheque tracking. Salary and Loan Interest expenses feed the Staff payments and Loan
+payments rows, but there is no separate staff or loan module. WhatsApp integration is limited
+to click-to-chat payment reminders; no paid WhatsApp Business API or automatic server-side
+sending is used. Production stock deductions are not implemented; the transaction type exists
+in the stock architecture for later use. No fake invoices, stock, transactions or accounting
+calculations are generated by this release.
 
 ## Notes
 
 - Currency is formatted for India with the `en-IN` locale, e.g. `₹1,00,000`.
 - Party balances are always derived from transactions. The opening balance is an input to the
   ledger; no stored running balance is ever overwritten.
+- Credit sales never increase cash in hand. Only cash retail sales, the paid portion of cash
+  wholesale invoices, cash party collections and cash count surpluses feed the cash book.
+  UPI and bank amounts are recorded separately and do not affect cash.
+- The cash book and its entries are recalculated from stored transactions on every request;
+  only the opening cash amount, opening date and recorded physical counts are stored inputs.
 - Payment reminders open `https://wa.me/...` in a new tab. The message is generated in the
   browser and nothing is sent until the user presses Send in WhatsApp.
 - Receipt and invoice PDFs use `Rs.` instead of `₹` because the built-in PDF fonts do not

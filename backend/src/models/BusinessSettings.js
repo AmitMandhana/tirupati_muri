@@ -73,6 +73,15 @@ const businessSettingsSchema = new mongoose.Schema(
       default: 100,
       min: [0, 'Low-stock threshold cannot be negative.'],
     },
+    cashOpeningBalance: {
+      type: Number,
+      default: 0,
+      min: [0, 'Opening cash cannot be negative.'],
+    },
+    cashOpeningDate: {
+      type: Date,
+      default: null,
+    },
   },
   {
     timestamps: true,

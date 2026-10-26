@@ -21,6 +21,8 @@ const DEFAULT_SETTINGS = {
   wholesaleMuriRate: 42,
   bagWeightKg: 50,
   lowStockThresholdKg: 100,
+  cashOpeningBalance: 0,
+  cashOpeningDate: null,
 };
 
 export const getSettings = asyncHandler(async (req, res) => {

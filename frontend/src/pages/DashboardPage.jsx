@@ -6,13 +6,16 @@ import NavIcon from '../components/NavIcon';
 import StatCard from '../components/StatCard';
 import { useAuth } from '../hooks/useAuth';
 import { useBusinessSettings } from '../hooks/useBusinessSettings';
+import { getCashBookSummaryApi } from '../services/cashBookService';
 import { getReceivablesApi } from '../services/partyService';
 import { getSalesSummaryApi } from '../services/saleService';
 import { getStockOverviewApi } from '../services/stockService';
-import { formatLongDate, formatQuantity } from '../utils/format';
+import { formatINR, formatLongDate, formatQuantity } from '../utils/format';
 
 const quickLinks = [
   { to: '/retail-billing', label: 'Retail Billing', icon: 'billing', description: 'Counter sales' },
+  { to: '/cash-book', label: 'Cash Book', icon: 'cashbook', description: 'Daily cash position' },
+  { to: '/expenses', label: 'Expenses', icon: 'expenses', description: 'Costs & categories' },
   { to: '/stock', label: 'Stock', icon: 'stock', description: 'Balance & ledger' },
   { to: '/parties', label: 'Parties', icon: 'parties', description: 'Accounts & ledgers' },
   {
@@ -40,6 +43,8 @@ const DashboardPage = () => {
   const [stockFailed, setStockFailed] = useState(false);
   const [receivables, setReceivables] = useState(null);
   const [receivablesFailed, setReceivablesFailed] = useState(false);
+  const [cash, setCash] = useState(null);
+  const [cashFailed, setCashFailed] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
@@ -113,6 +118,27 @@ const DashboardPage = () => {
     };
   }, []);
 
+  useEffect(() => {
+    let isMounted = true;
+
+    getCashBookSummaryApi()
+      .then((data) => {
+        if (isMounted) {
+          setCash(data.summary ?? null);
+          setCashFailed(false);
+        }
+      })
+      .catch(() => {
+        if (isMounted) {
+          setCashFailed(true);
+        }
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
   const unit = stock?.unit ?? 'KG';
   const stockHint = stockFailed
     ? 'Stock unavailable'
@@ -142,6 +168,24 @@ const DashboardPage = () => {
         ? `${billCount(month.count)} this month`
         : 'No sales this month';
 
+  const todayExpensesHint = cashFailed
+    ? 'Expense summary unavailable'
+    : !cash
+      ? "Loading today's expenses..."
+      : cash.todayExpenses.count > 0
+        ? `${cash.todayExpenses.count} ${
+            cash.todayExpenses.count === 1 ? 'entry' : 'entries'
+          } · ${formatINR(cash.todayExpenses.cash)} cash`
+        : 'No expenses recorded today';
+
+  const cashInHandHint = cashFailed
+    ? 'Cash summary unavailable'
+    : !cash
+      ? 'Loading cash in hand...'
+      : cash.beforeOpening
+        ? 'Before the opening cash date'
+        : `Opening ${formatINR(cash.openingCash)} · ${formatINR(cash.cashSales)} cash sales today`;
+
   const todayStats = [
     {
       title: "Today's Sales",
@@ -149,8 +193,18 @@ const DashboardPage = () => {
       hint: todaySalesHint,
       value: summary ? today.total : null,
     },
-    { title: "Today's Expenses", icon: 'expenses', hint: 'No expenses recorded today', value: 0 },
-    { title: 'Cash in Hand', icon: 'cashbook', hint: 'Cash book not started', value: 0 },
+    {
+      title: "Today's Expenses",
+      icon: 'expenses',
+      hint: todayExpensesHint,
+      value: cash ? cash.todayExpenses.total : null,
+    },
+    {
+      title: 'Cash in Hand',
+      icon: 'cashbook',
+      hint: cashInHandHint,
+      value: cash ? cash.cashInHand : null,
+    },
     { title: 'Bank Balance', icon: 'bank', hint: 'No bank accounts added', value: 0 },
   ];
 
@@ -199,9 +253,9 @@ const DashboardPage = () => {
             <p className="mt-1 text-sm font-medium text-ink-500">Business Management System</p>
             <p className="mt-4 max-w-2xl text-sm leading-relaxed text-ink-500">
               Welcome back{firstName ? `, ${firstName}` : ''}. Retail billing, wholesale invoicing,
-              stock and party credit are live. Today&apos;s retail sales, Muri stock and party
-              receivable below come from recorded bills, stock movements, invoices and payments.
-              Cash book, expenses and reporting will fill in as later modules are added.
+              stock, party credit, expenses and the daily cash book are live. Today&apos;s sales,
+              expenses and cash in hand, Muri stock and party receivable below come from recorded
+              bills, stock movements, invoices, receipts and payments.
             </p>
           </div>
           <div className="hidden shrink-0 sm:block">
@@ -234,7 +288,7 @@ const DashboardPage = () => {
       <section>
         <SectionHeading
           title="Today"
-          description="Retail bills update these figures automatically."
+          description="Bills, receipts and expenses update these figures automatically."
         />
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           {todayStats.map((stat) => (
@@ -287,14 +341,14 @@ const DashboardPage = () => {
 
         <section className="card border-brand-100 bg-brand-50/50 p-6">
           <span className="pill border border-brand-200 bg-white uppercase tracking-[0.12em] text-brand-700">
-            Billing, stock &amp; credit live
+            Billing, credit &amp; cash live
           </span>
           <h2 className="mt-4 text-base font-semibold text-ink-900">What is included now</h2>
           <p className="mt-2 text-sm leading-relaxed text-ink-500">
             Sign-in, business settings, the product catalogue, retail billing, wholesale
-            invoicing, stock tracking, party ledgers, credit limits, payment receipts and
-            receivables are ready. Production, staff, the cash book, loans and reporting modules
-            will be added step by step.
+            invoicing, stock tracking, party ledgers, credit limits, payment receipts,
+            receivables, expense management and the daily cash book are ready. Production, staff
+            and loan management will be added step by step.
           </p>
           <Link
             to="/settings"

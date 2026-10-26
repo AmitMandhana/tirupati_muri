@@ -5,6 +5,8 @@ import morgan from 'morgan';
 
 import { env } from './config/env.js';
 import authRoutes from './routes/authRoutes.js';
+import cashBookRoutes from './routes/cashBookRoutes.js';
+import expenseRoutes from './routes/expenseRoutes.js';
 import partyRoutes from './routes/partyRoutes.js';
 import productRoutes from './routes/productRoutes.js';
 import saleRoutes from './routes/saleRoutes.js';
@@ -39,6 +41,8 @@ app.use('/api/sales', saleRoutes);
 app.use('/api/stock', stockRoutes);
 app.use('/api/parties', partyRoutes);
 app.use('/api/invoices', wholesaleInvoiceRoutes);
+app.use('/api/expenses', expenseRoutes);
+app.use('/api/cash-book', cashBookRoutes);
 
 app.use(notFound);
 app.use(errorHandler);

@@ -53,6 +53,24 @@ const longDateFormatter = new Intl.DateTimeFormat('en-IN', {
 
 export const formatLongDate = (date = new Date()) => longDateFormatter.format(date);
 
+export const toDateInputValue = (date = new Date()) => {
+  const value = new Date(date);
+  const year = value.getFullYear();
+  const month = String(value.getMonth() + 1).padStart(2, '0');
+  const day = String(value.getDate()).padStart(2, '0');
+
+  return `${year}-${month}-${day}`;
+};
+
+export const addDaysToDateKey = (dateKey, days) => {
+  const date = new Date(`${dateKey}T12:00:00`);
+  date.setDate(date.getDate() + days);
+  return toDateInputValue(date);
+};
+
+export const formatDateKeyLong = (dateKey) =>
+  formatLongDate(new Date(`${dateKey}T12:00:00`));
+
 const receiptDateFormatter = new Intl.DateTimeFormat('en-IN', {
   day: '2-digit',
   month: 'short',
