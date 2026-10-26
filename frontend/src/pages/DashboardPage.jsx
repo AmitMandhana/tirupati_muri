@@ -6,6 +6,7 @@ import NavIcon from '../components/NavIcon';
 import StatCard from '../components/StatCard';
 import { useAuth } from '../hooks/useAuth';
 import { useBusinessSettings } from '../hooks/useBusinessSettings';
+import { getReceivablesApi } from '../services/partyService';
 import { getSalesSummaryApi } from '../services/saleService';
 import { getStockOverviewApi } from '../services/stockService';
 import { formatLongDate, formatQuantity } from '../utils/format';
@@ -13,8 +14,13 @@ import { formatLongDate, formatQuantity } from '../utils/format';
 const quickLinks = [
   { to: '/retail-billing', label: 'Retail Billing', icon: 'billing', description: 'Counter sales' },
   { to: '/stock', label: 'Stock', icon: 'stock', description: 'Balance & ledger' },
-  { to: '/parties', label: 'Parties', icon: 'parties', description: 'Customers & suppliers' },
-  { to: '/reports', label: 'Reports', icon: 'reports', description: 'Business summaries' },
+  { to: '/parties', label: 'Parties', icon: 'parties', description: 'Accounts & ledgers' },
+  {
+    to: '/receivables',
+    label: 'Receivables',
+    icon: 'loans',
+    description: 'Outstanding & reminders',
+  },
 ];
 
 const SectionHeading = ({ title, description }) => (
@@ -32,6 +38,8 @@ const DashboardPage = () => {
   const [summaryFailed, setSummaryFailed] = useState(false);
   const [stock, setStock] = useState(null);
   const [stockFailed, setStockFailed] = useState(false);
+  const [receivables, setReceivables] = useState(null);
+  const [receivablesFailed, setReceivablesFailed] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
@@ -84,6 +92,27 @@ const DashboardPage = () => {
     };
   }, []);
 
+  useEffect(() => {
+    let isMounted = true;
+
+    getReceivablesApi()
+      .then((data) => {
+        if (isMounted) {
+          setReceivables(data.summary ?? null);
+          setReceivablesFailed(false);
+        }
+      })
+      .catch(() => {
+        if (isMounted) {
+          setReceivablesFailed(true);
+        }
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
   const unit = stock?.unit ?? 'KG';
   const stockHint = stockFailed
     ? 'Stock unavailable'
@@ -125,8 +154,21 @@ const DashboardPage = () => {
     { title: 'Bank Balance', icon: 'bank', hint: 'No bank accounts added', value: 0 },
   ];
 
+  const receivablesHint = receivablesFailed
+    ? 'Receivable summary unavailable'
+    : !receivables
+      ? 'Loading receivables...'
+      : receivables.partyCount > 0
+        ? `${receivables.partyCount} ${receivables.partyCount === 1 ? 'party has' : 'parties have'} dues`
+        : 'No outstanding balances';
+
   const businessStats = [
-    { title: 'Party Receivable', icon: 'parties', hint: 'No party balances yet', value: 0 },
+    {
+      title: 'Party Receivable',
+      icon: 'parties',
+      hint: receivablesHint,
+      value: receivables ? receivables.totalOutstanding : null,
+    },
     {
       title: 'Muri Stock',
       icon: 'stock',
@@ -156,10 +198,10 @@ const DashboardPage = () => {
             </h1>
             <p className="mt-1 text-sm font-medium text-ink-500">Business Management System</p>
             <p className="mt-4 max-w-2xl text-sm leading-relaxed text-ink-500">
-              Welcome back{firstName ? `, ${firstName}` : ''}. Retail billing, wholesale invoicing
-              and stock are live. Today&apos;s retail sales and Muri stock below come from recorded
-              bills and stock transactions; wholesale totals are on the Wholesale page.
-              Accounting figures will fill in as later modules are added.
+              Welcome back{firstName ? `, ${firstName}` : ''}. Retail billing, wholesale invoicing,
+              stock and party credit are live. Today&apos;s retail sales, Muri stock and party
+              receivable below come from recorded bills, stock movements, invoices and payments.
+              Cash book, expenses and reporting will fill in as later modules are added.
             </p>
           </div>
           <div className="hidden shrink-0 sm:block">
@@ -204,7 +246,7 @@ const DashboardPage = () => {
       <section>
         <SectionHeading
           title="Business position"
-          description="Stock and sales update from recorded transactions."
+          description="Stock, sales and party receivables update from recorded transactions."
         />
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           {businessStats.map((stat) => (
@@ -245,12 +287,13 @@ const DashboardPage = () => {
 
         <section className="card border-brand-100 bg-brand-50/50 p-6">
           <span className="pill border border-brand-200 bg-white uppercase tracking-[0.12em] text-brand-700">
-            Billing &amp; stock live
+            Billing, stock &amp; credit live
           </span>
           <h2 className="mt-4 text-base font-semibold text-ink-900">What is included now</h2>
           <p className="mt-2 text-sm leading-relaxed text-ink-500">
             Sign-in, business settings, the product catalogue, retail billing, wholesale
-            invoicing and stock tracking are ready. Production, staff, loan and reporting modules
+            invoicing, stock tracking, party ledgers, credit limits, payment receipts and
+            receivables are ready. Production, staff, the cash book, loans and reporting modules
             will be added step by step.
           </p>
           <Link

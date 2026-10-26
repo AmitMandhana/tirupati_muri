@@ -10,7 +10,7 @@ import Spinner from '../components/Spinner';
 import StatCard from '../components/StatCard';
 import WholesaleInvoiceDialog from '../components/WholesaleInvoiceDialog';
 import { createInvoiceApi, getInvoicesApi } from '../services/invoiceService';
-import { getPartiesApi } from '../services/partyService';
+import { getPartiesApi, getReceivablesApi } from '../services/partyService';
 import { getProductsApi } from '../services/productService';
 import { getStockOverviewApi } from '../services/stockService';
 import { PAYMENT_METHODS, getPaymentLabel } from '../utils/billing';
@@ -59,6 +59,8 @@ const WholesalePage = () => {
   const [partiesError, setPartiesError] = useState('');
   const [partiesToken, setPartiesToken] = useState(0);
   const [isPartyDialogOpen, setIsPartyDialogOpen] = useState(false);
+  const [partyBalances, setPartyBalances] = useState({});
+  const [partyBalancesToken, setPartyBalancesToken] = useState(0);
 
   const [products, setProducts] = useState([]);
   const [isLoadingProducts, setIsLoadingProducts] = useState(true);
@@ -95,7 +97,7 @@ const WholesalePage = () => {
   useEffect(() => {
     let isMounted = true;
 
-    getPartiesApi()
+    getPartiesApi({ active: true })
       .then((data) => {
         if (!isMounted) {
           return;
@@ -127,6 +129,32 @@ const WholesalePage = () => {
       isMounted = false;
     };
   }, [partiesToken]);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    getReceivablesApi()
+      .then((data) => {
+        if (!isMounted) {
+          return;
+        }
+
+        const next = {};
+        (Array.isArray(data.parties) ? data.parties : []).forEach((party) => {
+          next[String(party._id)] = party;
+        });
+        setPartyBalances(next);
+      })
+      .catch(() => {
+        if (isMounted) {
+          setPartyBalances({});
+        }
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [partyBalancesToken]);
 
   useEffect(() => {
     let isMounted = true;
@@ -244,6 +272,9 @@ const WholesalePage = () => {
   }, [search, fromDate, toDate, historyToken]);
 
   const selectedParty = parties.find((party) => party._id === partyId) ?? null;
+  const selectedPartyBalance = selectedParty
+    ? Number(partyBalances[selectedParty._id]?.outstanding ?? 0)
+    : 0;
   const selectedProduct = products.find((product) => product._id === productId) ?? null;
   const selectedStock = stockByProduct[productId] ?? null;
   const unit = selectedProduct?.unit || 'KG';
@@ -376,6 +407,7 @@ const WholesalePage = () => {
       setInvoiceDialog(data.invoice);
       setStockToken((token) => token + 1);
       setHistoryToken((token) => token + 1);
+      setPartyBalancesToken((token) => token + 1);
       setIsLoadingHistory(true);
       toast.success(`Invoice ${data.invoice.invoiceNumber} saved.`);
     } catch (error) {
@@ -461,9 +493,10 @@ const WholesalePage = () => {
           <span className="flex h-12 w-12 items-center justify-center rounded-full bg-brand-50 text-brand-600">
             <NavIcon name="parties" className="h-6 w-6" />
           </span>
-          <h2 className="mt-4 text-base font-semibold text-ink-900">No parties yet</h2>
+          <h2 className="mt-4 text-base font-semibold text-ink-900">No active parties</h2>
           <p className="mt-1 max-w-sm text-sm text-ink-500">
-            Add a wholesale party with a phone number, then raise the first invoice.
+            Add a wholesale party with a phone number, then raise the first invoice. Inactive
+            parties can be reactivated from the Parties page.
           </p>
           <button
             type="button"
@@ -505,6 +538,25 @@ const WholesalePage = () => {
               </button>
             </div>
           </FormField>
+
+          {selectedParty ? (
+            <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-ink-500">
+              <span>
+                Outstanding{' '}
+                <span className="font-semibold text-ink-900">
+                  {formatINR2(selectedPartyBalance)}
+                </span>
+              </span>
+              <span>
+                Credit limit{' '}
+                <span className="font-semibold text-ink-900">
+                  {Number(selectedParty.creditLimit) > 0
+                    ? formatINR2(selectedParty.creditLimit)
+                    : 'No limit'}
+                </span>
+              </span>
+            </div>
+          ) : null}
 
           <div className="mt-4 grid gap-4 sm:grid-cols-2">
             <FormField
@@ -760,6 +812,22 @@ const WholesalePage = () => {
                 <dd className="font-medium text-ink-900">{selectedParty?.phone ?? '—'}</dd>
               </div>
               <div className="flex items-baseline justify-between gap-3">
+                <dt className="text-ink-500">Outstanding</dt>
+                <dd className="font-medium text-ink-900">
+                  {selectedParty ? formatINR2(selectedPartyBalance) : '—'}
+                </dd>
+              </div>
+              <div className="flex items-baseline justify-between gap-3">
+                <dt className="text-ink-500">Credit limit</dt>
+                <dd className="font-medium text-ink-900">
+                  {selectedParty && Number(selectedParty.creditLimit) > 0
+                    ? formatINR2(selectedParty.creditLimit)
+                    : selectedParty
+                      ? 'No limit'
+                      : '—'}
+                </dd>
+              </div>
+              <div className="flex items-baseline justify-between gap-3">
                 <dt className="text-ink-500">Product</dt>
                 <dd className="font-medium text-ink-900">{selectedProduct?.name ?? '—'}</dd>
               </div>
@@ -1013,7 +1081,7 @@ const WholesalePage = () => {
 
       <p className="px-1 text-xs text-ink-400">
         Showing the latest {ROW_LIMIT} invoices. Search matches invoice number, party name or phone.
-        This release tracks paid and due per invoice; the party ledger will come later.
+        Open a party from Parties to see its full ledger, outstanding balance and payment reminders.
       </p>
     </div>
   );

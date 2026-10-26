@@ -2,9 +2,11 @@
 
 A cloud-based business management web application for a puffed rice (muri) mill. This release
 includes authentication, the application shell, the dashboard, business settings, the product
-master, fast retail billing with printable thermal receipts, a ledger-based Muri stock module
-and wholesale invoicing with A4 invoices. Party ledgers, production, staff, loans and reports
-are represented by clearly marked "Coming Soon" pages and will be added in later phases.
+master, fast retail billing with printable thermal receipts, a ledger-based Muri stock module,
+wholesale invoicing with A4 invoices, and complete party ledgers with credit limits, payment
+receipts, accounts receivable and WhatsApp payment reminders. Production, staff, expenses,
+cash book, bank accounts, loans and reports are represented by clearly marked "Coming Soon"
+pages and will be added in later phases.
 
 ## Tech stack
 
@@ -21,22 +23,22 @@ murii/
 │   ├── .env.example
 │   └── src/
 │       ├── config/        # environment loading and database connection
-│       ├── controllers/   # auth, settings, product, sale, stock, party and invoice handlers
+│       ├── controllers/   # auth, settings, product, sale, stock, party, payment and invoice handlers
 │       ├── middleware/    # JWT auth, error handling
-│       ├── models/        # User, BusinessSettings, Product, Sale, Counter, ProductStock, StockTransaction, Party, WholesaleInvoice
+│       ├── models/        # User, BusinessSettings, Product, Sale, Counter, ProductStock, StockTransaction, Party, PartyPayment, WholesaleInvoice
 │       ├── routes/        # /api/auth, /api/settings, /api/products, /api/sales, /api/stock, /api/parties, /api/invoices
-│       ├── services/      # token signing, product seed, sales, wholesale invoices, bill numbers, stock movements
+│       ├── services/      # token signing, product seed, sales, wholesale invoices, party ledger, bill numbers, stock movements
 │       ├── utils/         # async wrapper, HTTP errors, validators, stock types
 │       ├── app.js         # Express app
 │       └── server.js      # startup entry point
 └── frontend/
     └── src/
-        ├── components/    # layout pieces, form fields, dialogs, receipt, invoice sheet, icons
+        ├── components/    # layout pieces, form fields, dialogs, receipt, invoice sheet, payment dialog, icons
         ├── hooks/         # authentication and business-settings contexts
         ├── layouts/       # sidebar + header application shell
-        ├── pages/         # login, dashboard, settings, products, retail billing, stock, wholesale, placeholders
+        ├── pages/         # login, dashboard, settings, products, retail billing, stock, wholesale, parties, party ledger, receivables, placeholders
         ├── services/      # Axios instance and API calls
-        └── utils/         # currency, dates, validation, billing, stock, invoice helpers and PDFs
+        └── utils/         # currency, dates, validation, billing, stock, invoice, WhatsApp reminder helpers and PDFs
 ```
 
 ## Prerequisites
@@ -313,12 +315,12 @@ Open **Wholesale** from the Operations section. The page has two tabs: **New inv
 
 ### Parties
 
-Wholesale invoices are raised against a party. Click **Add party** (or add one from the empty
-state), enter the party name, a phone number and an optional address, and save. Parties are
-listed alphabetically and searched by name or phone. The party name and phone are copied onto
-each invoice when it is saved, so later edits do not change historical invoices. This release
-creates and lists parties only; the **party ledger is not implemented yet**, so the standalone
-Parties page remains a placeholder and parties are created from the Wholesale screen.
+Wholesale invoices are raised against a party. Parties can be added from the Wholesale screen
+or managed from the standalone **Parties** page (name, phone, address, opening balance, credit
+limit, notes and active status). The party name and phone are copied onto each invoice when it
+is saved, so later edits do not change historical invoices. Inactive parties cannot receive new
+invoices, but they keep their ledger and can still make payments. See
+[Parties, ledgers and credit management](#11-parties-ledgers-and-credit-management).
 
 ### Creating an invoice
 
@@ -343,8 +345,12 @@ Invoice numbers are sequential and concurrency-safe: `INV-000001`, `INV-000002`,
 Numbers are generated on the server after stock is reserved, so a rejected invoice never
 consumes a number. Each invoice stores the number, party reference and name/phone snapshot,
 product reference and name/unit snapshot, quantity, rate, amount, total, paid, due, payment
-method, status, notes and timestamps. Paid and due are stored per invoice; no single running
-party balance is kept.
+method, status, notes and timestamps. Paid and due are stored per invoice; the party balance is
+not stored — it is calculated from the opening balance, invoices and receipts as described
+below. Inactive parties cannot receive new invoices. When a party has a credit limit, a new
+invoice with an amount due cannot take its outstanding above that limit; the invoice is
+rejected with a message showing the available credit and the amount this invoice would add.
+Fully paid invoices (due zero) are always allowed.
 
 Statuses are derived from the amounts: **Paid** (`due` is zero), **Partially Paid** (some
 amount received), and **Credit** (nothing received).
@@ -373,6 +379,144 @@ Search matches the invoice number, party name or phone. **From date** and **To d
 invoice date; both bounds are inclusive and the list shows the latest 200 matching invoices.
 **Clear filters** resets the search and dates.
 
+## 11. Parties, ledgers and credit management
+
+Open **Parties** from the Operations section to manage every customer or supplier account, and
+**Receivables** from the Finance section for the outstanding report.
+
+### Party management
+
+The Parties page lists every party with phone, opening balance, credit limit, status and
+actions. Search matches the name or phone, and the status filter shows all, active-only or
+inactive-only parties. **Add party** and **Edit** open a dialog with:
+
+| Field             | Notes                                                              |
+| ----------------- | ------------------------------------------------------------------ |
+| Name              | Required                                                           |
+| Phone             | Required; used for search and WhatsApp reminders                    |
+| Address           | Optional                                                           |
+| Opening balance   | Amount already owed when the party was added; `0` or more          |
+| Credit limit      | Maximum outstanding allowed for new credit invoices; `0` = no limit |
+| Notes             | Optional, up to 500 characters                                     |
+| Active            | Inactive parties keep their history but cannot receive new invoices |
+
+Parties are never hard-deleted. Editing a party does not rewrite the name or phone copied onto
+historical invoices and payments.
+
+### Party ledger
+
+Open a party with **Ledger** on the Parties or Receivables page. The ledger shows **Date**,
+**Reference**, **Description**, **Debit**, **Credit** and **Balance**, and the page shows total
+invoices, total sales, total received, outstanding and the credit-limit position.
+
+- **Debit** is what the party owes: the opening balance and invoice totals.
+- **Credit** is money received: the amount paid when an invoice was created plus every later
+  payment receipt.
+- **Balance** is the running `debit − credit` including the opening balance. The current
+  outstanding is `opening balance + total invoice value − total received`.
+
+Nothing writes a balance directly. Every figure is recalculated from the opening balance,
+invoices and recorded payments each time the ledger is requested. The opening-balance row is
+always shown first, then transactions in date order. A payment received on the same day as an
+invoice is shown after that invoice.
+
+Example: opening balance **₹5,000**, an invoice for **₹20,000** with **₹5,000** paid, and a
+later **₹10,000** receipt produce this ledger:
+
+| Date  | Reference  | Description      | Debit    | Credit   | Balance  |
+| ----- | ---------- | ---------------- | -------- | -------- | -------- |
+| 01 Oct| Opening    | Opening balance  | ₹5,000   | —        | ₹5,000   |
+| 05 Oct| INV-000001 | Wholesale invoice| ₹20,000  | ₹5,000   | ₹20,000  |
+| 10 Oct| PAY-000001 | Payment received | —        | ₹10,000  | ₹10,000  |
+
+The party's outstanding is **₹10,000**.
+
+### Receive payment
+
+Use **Receive payment** on the party page. The party is fixed by the dialog, and the form asks
+for the **amount**, **payment method** (**Cash**, **UPI** or **Bank**), **payment date** (today
+or earlier) and optional **notes**. UPI and bank payments are recorded into the **bank**
+account; cash is recorded into the **cash** account. The dialog previews the outstanding after
+the payment and offers **Full outstanding**.
+
+Saving a payment:
+
+- creates a numbered payment receipt (`PAY-000001`, `PAY-000002`, ...) with a snapshot of the
+  party name and phone;
+- adds a **Credit** row to the party ledger and reduces the outstanding immediately;
+- increases the cash or bank collection totals shown on the Receivables page.
+
+Payments are rejected when the amount is zero or negative, when the date is in the future, or
+when the account does not match the method (cash payments must use the cash account, UPI and
+bank payments the bank account). A payment larger than the outstanding is allowed and leaves
+the party with an advance; no invoice is created. A rejected payment does not consume a
+payment number.
+
+### Accounts receivable
+
+The **Receivables** page lists only parties with a positive outstanding balance, sorted from
+the highest amount due. Each row shows the party, phone, outstanding amount, last payment and
+last invoice dates, credit limit and actions to open the ledger or send a reminder. The four
+summary cards show **Total receivable**, **Parties with dues**, **Cash received** and **Bank
+received**. The cash and bank cards are all-time totals of recorded receipts and are not
+affected by the search box. Search matches the party name or phone.
+
+The **Party Receivable** card on the dashboard uses the same total and shows how many parties
+have dues.
+
+### Credit limits
+
+A credit limit of `0` means no limit. Otherwise:
+
+```
+available credit = max(credit limit − current outstanding, 0)
+```
+
+A new invoice with an amount due larger than the available credit is rejected before stock is
+reserved or an invoice number is used:
+
+```
+Credit limit exceeded. Available credit: ₹2,000.00; this invoice would add ₹2,500.00 to the outstanding.
+```
+
+An invoice that is fully paid at creation adds nothing to the outstanding and is always
+allowed. A credit invoice may bring the outstanding to exactly the limit; anything above it is
+rejected.
+
+### WhatsApp payment reminders
+
+**Send Payment Reminder** on the party page, or **Remind** on the Receivables page, opens
+WhatsApp click-to-chat (`https://wa.me/<phone>?text=<message>`) with a pre-filled message:
+
+```
+Dear ABC Traders,
+
+This is a payment reminder from Tirupati Puffed Rice Mill. Your outstanding balance is ₹5,000.00.
+
+Please arrange the payment at your earliest convenience.
+
+Thank you,
+Tirupati Puffed Rice Mill
+```
+
+The message contains the party name, outstanding amount and business name. The button is
+disabled when nothing is due. Phone numbers are normalised for WhatsApp: spaces and punctuation
+are removed, a leading `0` on an 11-digit number is dropped, and a 10-digit Indian number gets
+the `91` country code. No paid WhatsApp API, template approval or server-side messaging is used
+— the user reviews the message in WhatsApp and sends it themselves.
+
+### End-to-end example
+
+With 1,000 KG of opening stock and a 500 KG invoice at ₹40:
+
+1. Create **ABC Traders** with opening balance `0` and credit limit `₹50,000`.
+2. Raise an invoice for **₹20,000** with **₹5,000** paid. The ledger shows debit ₹20,000,
+   credit ₹5,000, balance **₹15,000**; stock becomes 500 KG.
+3. Record a **₹10,000 cash** payment. The outstanding becomes **₹5,000**, the ledger balance
+   becomes ₹5,000, cash received becomes ₹10,000 and the dashboard receivable falls by ₹10,000.
+4. Try a 10 KG credit invoice for ABC. It is rejected with the credit-limit message, stock and
+   invoice numbers are unchanged.
+
 ## API endpoints
 
 | Method | Path               | Auth | Purpose                              |
@@ -395,8 +539,12 @@ invoice date; both bounds are inclusive and the list shows the latest 200 matchi
 | POST   | `/api/stock/opening` | Yes | Record opening stock once per product |
 | POST   | `/api/stock/movements` | Yes | Record a purchase, wastage or adjustment |
 | GET    | `/api/stock/:productId/ledger` | Yes | Stock ledger for one product (optional `limit`, max 200) |
-| GET    | `/api/parties`     | Yes  | List parties (optional `search` on name or phone) |
-| POST   | `/api/parties`     | Yes  | Create a party (name, phone, optional address) |
+| GET    | `/api/parties`     | Yes  | List parties with derived outstanding (`search`, `active`) |
+| POST   | `/api/parties`     | Yes  | Create a party with opening balance, credit limit, notes and status |
+| GET    | `/api/parties/receivables` | Yes | Accounts receivable list and cash/bank receipt summary (`search`) |
+| GET    | `/api/parties/:id` | Yes  | Party account, statistics, credit position and full ledger |
+| PUT    | `/api/parties/:id` | Yes  | Update party details, opening balance, credit limit and status |
+| POST   | `/api/parties/:id/payments` | Yes | Record a payment and return the new outstanding |
 | GET    | `/api/invoices`    | Yes  | List wholesale invoices with a filtered summary (`search`, `from`, `to`, `limit`) |
 | POST   | `/api/invoices`    | Yes  | Create a wholesale invoice and deduct stock |
 | GET    | `/api/invoices/:id`| Yes  | Read one wholesale invoice           |
@@ -417,15 +565,36 @@ customerName?, notes? }`. `inputMode` is `amount` (default) or `quantity`; `rate
 the product's retail rate. Credit sales require `customerName`. Bill numbers are generated on
 the server and cannot be supplied by the client.
 
-`POST /api/parties` accepts `{ name, phone, address? }`. Phone is required and validated; the
-address is optional.
+`POST /api/parties` accepts `{ name, phone, address?, openingBalance?, creditLimit?, notes?,
+active? }`. `name` and `phone` are required; `openingBalance` and `creditLimit` default to `0`
+and cannot be negative; a `creditLimit` of `0` means no limit. `PUT /api/parties/:id` updates
+the same fields. `GET /api/parties` returns each party with its derived outstanding and can be
+filtered with `search` (name or phone) and `active=true`.
+
+`GET /api/parties/:id` returns `{ party, stats, credit, ledger }`, where `stats` contains the
+invoice count, total sales, total received, outstanding and last invoice/payment dates, `credit`
+contains the limit, used and available amounts, and `ledger` contains the opening, invoice and
+payment rows with a running balance. Nothing in the API accepts a balance or ledger row from
+the client; both are calculated from stored transactions.
+
+`POST /api/parties/:id/payments` accepts `{ amount, paymentMethod, account, paymentDate,
+notes? }`. `paymentMethod` is `cash`, `upi` or `bank`; `account` must be `cash` for cash
+payments and `bank` for UPI/bank payments. `paymentDate` accepts `YYYY-MM-DD` and cannot be in
+the future. The server assigns the `PAY-000001`-style number, creates the receipt and returns
+`{ payment, outstanding }`. A payment number is allocated only after validation succeeds.
+
+`GET /api/parties/receivables` returns `{ parties, summary }`, sorted by outstanding from
+highest to lowest and limited to positive balances. `summary` contains `totalOutstanding`,
+`partyCount`, `cashReceived`, `bankReceived` and `paymentsCount`; the cash and bank figures are
+all-time totals and are not narrowed by `search`.
 
 `POST /api/invoices` accepts `{ partyId, productId, quantity, rate?, paid?, paymentMethod?,
 notes? }`. `rate` defaults to the product's wholesale rate, `paid` defaults to `0` and cannot
 exceed the calculated total, and `paymentMethod` is `cash` (default), `upi`, `bank` or
-`credit`. The server calculates `total`, `due`, status and the invoice number. `GET
-/api/invoices` returns `{ invoices, summary }`, where the summary applies the same search/date
-filters as the list.
+`credit`. The server calculates `total`, `due`, status and the invoice number. Inactive parties
+are rejected, and an invoice with an amount due is rejected when it would take the party's
+outstanding above its credit limit. `GET /api/invoices` returns `{ invoices, summary }`, where
+the summary applies the same search/date filters as the list.
 
 ## What is included in this release
 
@@ -433,8 +602,8 @@ filters as the list.
 - MongoDB connection through Mongoose
 - Single-user authentication: bcrypt hashing, JWT, protected routes, logout
 - First-time setup flow for the owner account
-- Responsive sidebar/header layout with all 13 navigation entries
-- Dashboard with real today's and monthly sales figures from retail sale records
+- Responsive sidebar/header layout with all 15 navigation entries
+- Dashboard with real today's and monthly sales figures, Muri stock and total party receivable
 - Business settings saved to MongoDB, including receipt/invoice footers, Muri rates, bag weight
   and low-stock threshold
 - Product master with search, add, edit and activate/deactivate; Muri is seeded on first start
@@ -444,7 +613,12 @@ filters as the list.
 - Stock ledger with opening stock, purchases, wastage and adjustments, current KG and bag count
 - Atomic stock deduction on retail sales with exact insufficient-stock rejection and no bill-number gaps
 - Real Muri stock on the dashboard with a configurable low-stock warning
-- Party creation and listing for wholesale invoicing
+- Party management with phone, address, opening balance, credit limit, notes and active status
+- Party ledger calculated from the opening balance, invoices and recorded payments, with a running balance
+- Receive-payment receipts (`PAY-000001`, ...) recorded to the cash or bank account with no number gaps on rejection
+- Accounts receivable with outstanding, last payment and last invoice, sorted by highest amount due
+- Credit-limit checks that reject invoices over the limit before stock or invoice numbers are used
+- WhatsApp click-to-chat payment reminders pre-filled with the party, outstanding and business name
 - Wholesale invoices with live total, paid and due calculation and cash/UPI/bank/credit payment
 - Sequential invoice numbers (`INV-000001`, `INV-000002`, ...) that are not consumed by rejected invoices
 - Invoice-level paid and due tracking with Paid, Partially Paid and Credit statuses
@@ -456,16 +630,21 @@ filters as the list.
 
 ## What is intentionally not included yet
 
-The complete party ledger, production, staff, expenses, cash book, bank accounts, loans,
-reports and WhatsApp integration. Wholesale tracking is per invoice only: there is no running
-party balance, payment history beyond each invoice's paid and due amounts, or party statement
-yet. Production stock deductions are not implemented; the transaction type exists in the stock
+Production, staff, expenses, the cash book, bank accounts, loans and reports are not
+implemented yet. The Receivables page shows all-time cash and bank receipt totals, but it is
+not a cash book or a bank reconciliation. WhatsApp integration is limited to click-to-chat
+payment reminders; no paid WhatsApp Business API or automatic server-side sending is used.
+Production stock deductions are not implemented; the transaction type exists in the stock
 architecture for later use. No fake invoices, stock, transactions or accounting calculations
 are generated by this release.
 
 ## Notes
 
 - Currency is formatted for India with the `en-IN` locale, e.g. `₹1,00,000`.
+- Party balances are always derived from transactions. The opening balance is an input to the
+  ledger; no stored running balance is ever overwritten.
+- Payment reminders open `https://wa.me/...` in a new tab. The message is generated in the
+  browser and nothing is sent until the user presses Send in WhatsApp.
 - Receipt and invoice PDFs use `Rs.` instead of `₹` because the built-in PDF fonts do not
   include the rupee glyph. On-screen and printed documents show `₹`.
 - The interface is English-only and designed desktop-first, with a responsive mobile drawer.

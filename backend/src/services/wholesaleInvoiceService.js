@@ -4,6 +4,7 @@ import { Party } from '../models/Party.js';
 import { Product } from '../models/Product.js';
 import { WholesaleInvoice } from '../models/WholesaleInvoice.js';
 import { getNextWholesaleInvoiceNumber } from './billNumberService.js';
+import { getPartyOutstanding } from './partyService.js';
 import {
   attachSaleReference,
   releaseStockReservation,
@@ -95,6 +96,10 @@ export const createWholesaleInvoice = async (body = {}) => {
     throw httpError(404, 'Party not found.');
   }
 
+  if (party.active === false) {
+    throw httpError(400, 'This party is inactive. Reactivate it before raising an invoice.');
+  }
+
   const productId = toText(body.productId);
 
   if (!productId || !mongoose.isValidObjectId(productId)) {
@@ -147,6 +152,20 @@ export const createWholesaleInvoice = async (body = {}) => {
   }
 
   const due = roundMoney(total - paid);
+
+  const creditLimit = roundMoney(party.creditLimit ?? 0);
+
+  if (creditLimit > 0 && due > 0) {
+    const outstanding = await getPartyOutstanding(party);
+    const available = roundMoney(Math.max(creditLimit - outstanding, 0));
+
+    if (due > available + 0.005) {
+      throw httpError(
+        400,
+        `Credit limit exceeded. Available credit: ₹${available.toFixed(2)}; this invoice would add ₹${due.toFixed(2)} to the outstanding.`,
+      );
+    }
+  }
 
   const paymentMethod = toText(body.paymentMethod).toLowerCase();
 

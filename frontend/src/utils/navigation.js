@@ -19,6 +19,7 @@ export const NAV_SECTIONS = [
   {
     label: 'Finance',
     items: [
+      { to: '/receivables', label: 'Receivables', icon: 'loans' },
       { to: '/expenses', label: 'Expenses', icon: 'expenses' },
       { to: '/cash-book', label: 'Cash Book', icon: 'cashbook' },
       { to: '/bank-accounts', label: 'Bank Accounts', icon: 'bank' },
@@ -41,6 +42,10 @@ export const NAV_SECTIONS = [
 const ALL_NAV_ITEMS = NAV_SECTIONS.flatMap((section) => section.items);
 
 export const getPageTitle = (pathname) => {
+  if (pathname.startsWith('/parties/')) {
+    return 'Party Ledger';
+  }
+
   const activeItem = ALL_NAV_ITEMS.find((item) => item.to === pathname);
   return activeItem?.label ?? 'Dashboard';
 };

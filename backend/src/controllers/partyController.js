@@ -1,51 +1,55 @@
-import { Party } from '../models/Party.js';
+import {
+  createParty,
+  getPartyDetail,
+  listParties,
+  listReceivables,
+  receivePartyPayment,
+  updateParty,
+} from '../services/partyService.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
-import { httpError } from '../utils/httpError.js';
-import { escapeRegExp, isValidPhone, toText } from '../utils/validators.js';
 
-export const listParties = asyncHandler(async (req, res) => {
-  const search = toText(req.query.search);
-  const filters = {};
+export const getParties = asyncHandler(async (req, res) => {
+  const result = await listParties(req.query);
 
-  if (search) {
-    const pattern = new RegExp(escapeRegExp(search), 'i');
-    filters.$or = [{ name: pattern }, { phone: pattern }];
-  }
-
-  const parties = await Party.find(filters).sort({ name: 1, _id: 1 }).limit(200).lean();
-
-  return res.status(200).json({ parties });
+  return res.status(200).json(result);
 });
 
-export const createParty = asyncHandler(async (req, res) => {
-  const name = toText(req.body.name);
-  const phone = toText(req.body.phone);
-  const address = toText(req.body.address);
-
-  if (!name) {
-    throw httpError(400, 'Party name is required.');
-  }
-
-  if (name.length > 150) {
-    throw httpError(400, 'Party name cannot be longer than 150 characters.');
-  }
-
-  if (!phone) {
-    throw httpError(400, 'Party phone is required.');
-  }
-
-  if (phone.length > 20 || !isValidPhone(phone)) {
-    throw httpError(400, 'Enter a valid party phone number.');
-  }
-
-  if (address.length > 300) {
-    throw httpError(400, 'Address cannot be longer than 300 characters.');
-  }
-
-  const party = await Party.create({ name, phone, address });
+export const addParty = asyncHandler(async (req, res) => {
+  const party = await createParty(req.body);
 
   return res.status(201).json({
     message: 'Party created.',
     party,
+  });
+});
+
+export const getParty = asyncHandler(async (req, res) => {
+  const result = await getPartyDetail(req.params.id);
+
+  return res.status(200).json(result);
+});
+
+export const editParty = asyncHandler(async (req, res) => {
+  const party = await updateParty(req.params.id, req.body);
+
+  return res.status(200).json({
+    message: 'Party updated.',
+    party,
+  });
+});
+
+export const getReceivables = asyncHandler(async (req, res) => {
+  const result = await listReceivables(req.query);
+
+  return res.status(200).json(result);
+});
+
+export const addPartyPayment = asyncHandler(async (req, res) => {
+  const { payment, outstanding } = await receivePartyPayment(req.params.id, req.body);
+
+  return res.status(201).json({
+    message: 'Payment recorded.',
+    payment,
+    outstanding,
   });
 });
