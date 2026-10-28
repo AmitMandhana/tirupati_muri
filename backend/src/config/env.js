@@ -19,10 +19,13 @@ if (process.env.JWT_SECRET.trim().length < 32) {
   throw new Error('JWT_SECRET must be at least 32 characters long.');
 }
 
-const clientOrigins = (process.env.CLIENT_URL || 'http://localhost:5173')
+const allowedOrigins = (process.env.CLIENT_URL || 'http://localhost:5173')
   .split(',')
   .map((origin) => origin.trim())
   .filter(Boolean);
+// "*" must stay a string: cors treats each array entry as an exact origin.
+const allowAllOrigins = allowedOrigins.includes('*');
+const clientOrigins = allowAllOrigins ? '*' : allowedOrigins;
 
 export const env = Object.freeze({
   nodeEnv: process.env.NODE_ENV || 'development',
@@ -30,7 +33,7 @@ export const env = Object.freeze({
   port: Number(process.env.PORT) || 5000,
   mongoUri: process.env.MONGODB_URI.trim(),
   jwtSecret: process.env.JWT_SECRET.trim(),
-  clientUrl: clientOrigins[0],
+  clientUrl: allowAllOrigins ? '*' : allowedOrigins[0],
   clientOrigins,
   trustProxy: process.env.TRUST_PROXY === 'true',
 });
